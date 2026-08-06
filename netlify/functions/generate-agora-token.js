@@ -1,8 +1,14 @@
 // Generates a fresh, short-lived Agora RTC token on demand.
 // Called automatically by the app every time someone starts a call —
 // nobody ever needs to touch this manually after it's deployed.
+//
+// NOTE: the agora-token package's exact export names have changed across
+// versions (buildTokenWithAccount / buildTokenWithUid / different casing).
+// Rather than guess one name and break again, we detect what's actually
+// available on the installed package at runtime and use whichever real
+// method exists.
 
-const { RtcTokenBuilder, RtcRole } = require("agora-token");
+const agoraToken = require("agora-token");
 
 const APP_ID = process.env.AGORA_APP_ID;
 const APP_CERTIFICATE = process.env.AGORA_APP_CERTIFICATE;
@@ -32,7 +38,7 @@ exports.handler = async (event) => {
       : JSON.parse(event.body || "{}");
 
     const channelName = params.channel;
-    const uid = params.uid || 0; // Agora accepts 0 to mean "assign any numeric uid", but we pass the real uid as a string identity below instead
+    const uid = params.uid != null ? String(params.uid) : "0";
 
     if (!channelName) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Missing 'channel' parameter." }) };
@@ -42,16 +48,41 @@ exports.handler = async (event) => {
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpireTs = currentTimestamp + expireSeconds;
 
-    // Build with account (string uid) since our app uses Firebase UIDs, not numeric Agora uids
-    const token = RtcTokenBuilder.buildTokenWithAccount(
-      APP_ID,
-      APP_CERTIFICATE,
-      channelName,
-      String(uid),
-      RtcRole.PUBLISHER,
-      privilegeExpireTs,
-      privilegeExpireTs
-    );
+    // Figure out which shape this installed version of agora-token actually has.
+    const RtcTokenBuilder = agoraToken.RtcTokenBuilder || agoraToken.default?.RtcTokenBuilder;
+    const RtcRole = agoraToken.RtcRole || agoraToken.default?.RtcRole || { PUBLISHER: 1 };
+
+    if (!RtcTokenBuilder) {
+      throw new Error("agora-token package did not export RtcTokenBuilder — package may not be installed correctly.");
+    }
+
+    let token;
+    if (typeof RtcTokenBuilder.buildTokenWithAccount === "function") {
+      // Newer versions: string-based user account
+      token = RtcTokenBuilder.buildTokenWithAccount(
+        APP_ID, APP_CERTIFICATE, channelName, uid,
+        RtcRole.PUBLISHER, privilegeExpireTs, privilegeExpireTs
+      );
+    } else if (typeof RtcTokenBuilder.buildTokenWithUserAccount === "function") {
+      // Some versions use this name instead
+      token = RtcTokenBuilder.buildTokenWithUserAccount(
+        APP_ID, APP_CERTIFICATE, channelName, uid,
+        RtcRole.PUBLISHER, privilegeExpireTs, privilegeExpireTs
+      );
+    } else if (typeof RtcTokenBuilder.buildTokenWithUid === "function") {
+      // Older/alternate versions: numeric uid only — hash the string uid down to a number
+      let numericUid = 0;
+      for (let i = 0; i < uid.length; i++) {
+        numericUid = (numericUid * 31 + uid.charCodeAt(i)) % 2147483647;
+      }
+      token = RtcTokenBuilder.buildTokenWithUid(
+        APP_ID, APP_CERTIFICATE, channelName, numericUid,
+        RtcRole.PUBLISHER, privilegeExpireTs, privilegeExpireTs
+      );
+    } else {
+      const available = Object.getOwnPropertyNames(RtcTokenBuilder).filter(n => typeof RtcTokenBuilder[n] === "function");
+      throw new Error("No recognized token-building method found on RtcTokenBuilder. Available methods: " + available.join(", "));
+    }
 
     return {
       statusCode: 200,
