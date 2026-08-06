@@ -1,0 +1,14 @@
+{
+  "name": "DiasporaLink",
+  "short_name": "DiasporaLink",
+  "description": "Global Community Platform for International Students",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080C14",
+  "theme_color": "#3B82F6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {"src":"https://api.iconify.design/twemoji:globe-showing-africa-europe.svg","sizes":"192x192","type":"image/svg+xml"},
+    {"src":"https://api.iconify.design/twemoji:globe-showing-africa-europe.svg","sizes":"512x512","type":"image/svg+xml"}
+  ]
+}
