@@ -177,8 +177,16 @@ export default function Messages() {
 
   useEffect(() => {
     if (!currentUser) return;
-    const q = query(collection(db, "conversations"), where("participants", "array-contains", currentUser.uid), orderBy("lastMessageAt", "desc"));
-    return onSnapshot(q, snap => setConversations(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    // No orderBy here on purpose — array-contains + orderBy on a different field needs a
+    // Firestore composite index, and an unbuilt index makes this listener fail silently
+    // (same root cause as an earlier notifications-bell bug). Sorting client-side instead
+    // means this works immediately on any fresh Firestore project, no manual index setup.
+    const q = query(collection(db, "conversations"), where("participants", "array-contains", currentUser.uid));
+    return onSnapshot(q, snap => {
+      const convos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      convos.sort((a, b) => (b.lastMessageAt?.toDate?.()?.getTime?.() || 0) - (a.lastMessageAt?.toDate?.()?.getTime?.() || 0));
+      setConversations(convos);
+    }, err => console.error("Conversations listener failed:", err));
   }, [currentUser]);
 
   // Auto-open a conversation if navigated here with ?start=uid (optionally ?listing=id to attach context)
