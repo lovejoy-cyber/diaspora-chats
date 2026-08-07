@@ -81,7 +81,7 @@ const STYLE = `
 `;
 
 export default function Rooms() {
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, isStaff } = useAuth();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [activeRoom, setActiveRoom] = useState(null);
@@ -93,7 +93,8 @@ export default function Rooms() {
   const [creating, setCreating] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const bottomRef = useRef(null);
-  const isStaff = ["admin","embassy","governor","president"].includes(userProfile?.role);
+  // isStaff now comes from AuthContext's ROLE_LEVELS (single source of truth) instead of
+  // a locally duplicated list that had drifted (was missing superadmin, secretary, etc.)
 
   useEffect(() => {
     if(!document.getElementById("rooms-css")) {
@@ -126,6 +127,23 @@ export default function Rooms() {
     if(!room) return false;
     if(room.type==="readonly") return isStaff;
     return true;
+  };
+
+  // Regional Monitors (governors) can only moderate rooms tied to THEIR assigned city —
+  // Embassy, President, and above can moderate anywhere. This is the city-scoping piece
+  // of the authority hierarchy: a governor for Oran shouldn't be able to delete a room
+  // or pin messages in the Alger room.
+  const canModerateRoom = (room) => {
+    if(!currentUser) return false;
+    if(room.creatorId===currentUser.uid) return true; // creator of a custom group always can
+    const level = userProfile?.level ?? 0;
+    if(level >= 70) return true; // president and above: unrestricted
+    if(userProfile?.role === "governor") {
+      // A governor can only moderate their own city's room (or non-city-specific rooms
+      // don't count as "theirs" — city rooms only).
+      return room.city && userProfile?.city === room.city;
+    }
+    return false;
   };
 
   const sendMessage = async () => {
@@ -164,7 +182,7 @@ export default function Rooms() {
   };
 
   const deleteRoom = async (room) => {
-    if(room.creatorId!==currentUser.uid&&!isStaff) return;
+    if(!canModerateRoom(room)) return;
     if(window.confirm("Delete \""+room.name+"\" permanently? This cannot be undone.")) {
       await deleteDoc(doc(db,"customRooms",room.id));
       if(activeRoom?.id===room.id) setActiveRoom(null);
@@ -211,7 +229,7 @@ export default function Rooms() {
                 <div key={room.id} className={"room-item"+(activeRoom?.id===room.id?" active":"")} onClick={()=>{setActiveRoom(room);setShowSidebar(false);}}>
                   <div className="room-dot" style={{background:"#f59e0b"}} />
                   <div className="room-item-info"><div className="room-item-name">{room.name}</div><div className="room-item-desc">{room.desc||"Custom group · by "+room.creatorName}</div></div>
-                  {(room.creatorId===currentUser.uid||isStaff)&&(
+                  {canModerateRoom(room)&&(
                     <button onClick={e=>{e.stopPropagation();deleteRoom(room);}} style={{background:"none",border:"none",color:"var(--text3)",cursor:"pointer",fontSize:13}}>🗑️</button>
                   )}
                 </div>

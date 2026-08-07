@@ -125,7 +125,7 @@ export const INTEREST_ROOMS = [
   {id:"social",name:"🎉 Social Life",desc:"Events & social",type:"public",color:"#EC4899"},
   {id:"zim_developers",name:"👨‍💻 Zim Developers",desc:"Zimbabwe tech community",type:"public",color:"#3B82F6"},
   {id:"alumni",name:"🎓 Alumni Network",desc:"Graduated members",type:"public",color:"#8B5CF6"},
-  {id:"oran",name:"🏙️ Oran City",desc:"Students in Oran",type:"public",color:"#06B6D4"},
-  {id:"alger",name:"🏙️ Alger City",desc:"Students in Alger",type:"public",color:"#06B6D4"},
-  {id:"constantine",name:"🏙️ Constantine City",desc:"Students in Constantine",type:"public",color:"#06B6D4"},
+  {id:"oran",name:"🏙️ Oran City",desc:"Students in Oran",type:"public",city:"Oran",color:"#06B6D4"},
+  {id:"alger",name:"🏙️ Alger City",desc:"Students in Alger",type:"public",city:"Alger",color:"#06B6D4"},
+  {id:"constantine",name:"🏙️ Constantine City",desc:"Students in Constantine",type:"public",city:"Constantine",color:"#06B6D4"},
 ];

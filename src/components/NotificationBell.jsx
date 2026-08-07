@@ -36,7 +36,7 @@ const CSS = `
 `;
 
 export default function NotificationBell() {
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);

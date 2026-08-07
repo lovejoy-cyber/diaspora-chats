@@ -73,6 +73,25 @@ export default function Calls() {
   const [group, setGroup] = useState(false);
   const clientRef = useRef(null);
   const tracksRef = useRef([]);
+
+  // Safety net: if this page unmounts while still in a call (user navigates away, closes
+  // tab, etc.) release the camera/mic immediately rather than leaving them held until the
+  // browser eventually garbage-collects — this is what was causing the camera light to
+  // stay on after a call ended.
+  useEffect(() => {
+    return () => {
+      tracksRef.current.forEach(t => {
+        try {
+          const mediaTrack = t.getMediaStreamTrack?.();
+          if (mediaTrack) mediaTrack.stop();
+          t.stop(); t.close();
+        } catch (e) {}
+      });
+      if (clientRef.current) {
+        try { clientRef.current.leave(); } catch (e) {}
+      }
+    };
+  }, []);
   const timerRef = useRef(null);
   const remoteRef = useRef(null);
   const localRef = useRef(null);
@@ -248,8 +267,22 @@ export default function Calls() {
 
   const end = async () => {
     try {
-      tracksRef.current.forEach(t => { try { t.stop(); t.close(); } catch (e) {} });
-      if (clientRef.current) await clientRef.current.leave();
+      // Stop each Agora track wrapper AND the raw underlying browser MediaStreamTrack —
+      // Agora's track.close() doesn't always fully release camera/mic hardware on its own,
+      // which was leaving the camera light on after hanging up. Explicitly stopping the
+      // native track guarantees the OS actually releases the device.
+      tracksRef.current.forEach(t => {
+        try {
+          const mediaTrack = t.getMediaStreamTrack?.();
+          if (mediaTrack) mediaTrack.stop();
+          t.stop();
+          t.close();
+        } catch (e) {}
+      });
+      if (clientRef.current) {
+        clientRef.current.removeAllListeners?.();
+        await clientRef.current.leave();
+      }
     } catch (e) {}
     if (activeCallId) {
       updateCallStatus(activeCallId, "ended").catch(() => {});

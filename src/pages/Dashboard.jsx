@@ -39,10 +39,10 @@ const NAV = [
   {path:"profile",label:"My Profile",icon:"👤"},
 ];
 
-const STAFF_ROLES = ["admin","embassy","governor","president","vice_president","secretary","treasurer"];
+// Staff/admin status now comes from AuthContext's ROLE_LEVELS (single source of truth).
 
 export default function Dashboard() {
-  const { userProfile } = useAuth();
+  const { userProfile, isStaff, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("dl_theme") || "dark");
@@ -52,7 +52,9 @@ export default function Dashboard() {
     localStorage.setItem("dl_theme", theme);
   }, [theme]);
   const initial = userProfile?.fullName?.[0]?.toUpperCase() || "?";
-  const isStaff = STAFF_ROLES.includes(userProfile?.role);
+  // isStaff now comes from AuthContext (single source of truth — see ROLE_LEVELS) instead
+  // of a locally duplicated array that had drifted out of sync (was missing superadmin
+  // and used "vice_president" with an underscore when the real role key has none).
   const roleInfo = ROLE_LABELS[userProfile?.role] || ROLE_LABELS.student;
   const logout = async () => { await signOut(auth); navigate("/login"); };
 

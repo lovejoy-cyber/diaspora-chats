@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 import { COUNTRY_ROOMS } from "../lib/rooms";
+import { getOrCreatePersistentDeviceId } from "../lib/deviceFingerprint";
 
 const NATIONALITIES = COUNTRY_ROOMS.map(r => r.country).concat(["Algerian","Other"]);
 const UNIVERSITIES = ["USTO-MB (Oran)","Université d'Oran 1","Université d'Oran 2","ENPO (Oran)","Université de Mostaganem","Université d'Alger 1","Université d'Alger 2","Université d'Alger 3","USTHB (Alger)","Université de Constantine 1","Université de Constantine 2","Université de Constantine 3","Université de Annaba","Université de Sétif","Université de Tlemcen","Université de Béjaïa","Université de Tizi Ouzou","Université de Blida","Université de Batna","Other"];
@@ -41,8 +42,22 @@ export default function Register() {
     if(err){setError(err);return;}
     setLoading(true);setError("");
     try {
+      // Soft cap: check how many existing accounts share this device fingerprint. We flag
+      // rather than hard-block — a family sharing one laptop, or a person who genuinely
+      // lost access to an old account, shouldn't be locked out outright. Admin reviews
+      // flagged accounts instead of the system silently refusing registration.
+      const deviceId = getOrCreatePersistentDeviceId();
+      let deviceAccountCount = 0;
+      try {
+        const q = query(collection(db,"deviceRegistry"), where("deviceId","==",deviceId));
+        const snap = await getDocs(q);
+        deviceAccountCount = snap.size;
+      } catch(e) { /* registry check failing shouldn't block registration */ }
+
       const userCred = await createUserWithEmailAndPassword(auth,form.email,form.password);
       try { await sendEmailVerification(userCred.user); } catch(e){}
+
+      const flaggedMultiAccount = deviceAccountCount >= 2;
       await setDoc(doc(db,"users",userCred.user.uid),{
         uid:userCred.user.uid,
         fullName:form.fullName.trim(),
@@ -60,9 +75,33 @@ export default function Register() {
         profileComplete:false,
         online:true,
         following:[],followers:[],blockedUsers:[],
+        deviceId,
+        flaggedMultiAccount,
         createdAt:serverTimestamp(),
         lastSeen:serverTimestamp(),
       });
+
+      // Record this signup against the device fingerprint for future checks.
+      try {
+        await addDoc(collection(db,"deviceRegistry"), {
+          deviceId, uid: userCred.user.uid, email: form.email.toLowerCase().trim(),
+          createdAt: serverTimestamp(),
+        });
+      } catch(e) {}
+
+      // If this is the device's 3rd+ account, notify admins so a human can review —
+      // never a silent automated ban.
+      if (flaggedMultiAccount) {
+        try {
+          await addDoc(collection(db,"notifications"), {
+            recipientId: "ADMIN", urgent: false, icon: "⚠️",
+            title: "Multiple accounts from one device",
+            message: form.fullName.trim() + " registered — this device already has " + deviceAccountCount + " other account(s). Review if needed.",
+            link: "/dashboard/admin",
+            read: false, createdAt: serverTimestamp(),
+          });
+        } catch(e) {}
+      }
     } catch(err) {
       const code = err.code;
       if(code==="auth/email-already-in-use") setError("This email is already registered.");

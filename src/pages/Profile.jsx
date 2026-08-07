@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { db, auth } from "../firebase/config";
 import { useAuth, ROLE_INFO } from "../contexts/AuthContext";
 import { uploadToCloudinary } from "../lib/helpers";
+import { redeemPrivilegeCode } from "../lib/privilegeCodes";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
 
@@ -29,6 +30,10 @@ export default function Profile() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("profile");
   const [editing, setEditing] = useState(false);
+  const [pcInput, setPcInput] = useState("");
+  const [pcRedeeming, setPcRedeeming] = useState(false);
+  const [pcErr, setPcErr] = useState("");
+  const [pcOk, setPcOk] = useState("");
   const [saving, setSaving] = useState(false);
   const [ok, setOk] = useState("");
   const [err, setErr] = useState("");
@@ -61,6 +66,28 @@ export default function Profile() {
     const currentlyEnabled = userProfile?.readReceiptsEnabled !== false; // undefined = enabled by default
     await setDoc(doc(db, "users", currentUser.uid), { readReceiptsEnabled: !currentlyEnabled }, { merge: true });
     await refreshProfile();
+  };
+
+  // Redeeming a privilege code — this is the only way anyone's role ever changes upward
+  // besides an admin directly editing it in the Admin panel. Nobody can grant themselves
+  // a role; they can only enter a code someone above them already issued.
+  const redeemCode = async (e) => {
+    e.preventDefault();
+    setPcErr(""); setPcOk("");
+    if (!pcInput.trim()) return;
+    setPcRedeeming(true);
+    try {
+      const result = await redeemPrivilegeCode({ code: pcInput.trim(), userId: currentUser.uid, userEmail: currentUser.email });
+      const updates = { role: result.role };
+      if (result.scopeCity) updates.city = result.scopeCity; // governor codes can also (re)assign the city they're scoped to
+      await setDoc(doc(db, "users", currentUser.uid), updates, { merge: true });
+      await refreshProfile();
+      setPcOk("Success! You are now " + (ROLE_INFO[result.role]?.label || result.role) + ". Granted by " + result.issuerName + ".");
+      setPcInput("");
+    } catch (err) {
+      setPcErr(err.message || "Could not redeem code.");
+    }
+    setPcRedeeming(false);
   };
 
   const startEdit = () => {
@@ -184,6 +211,7 @@ export default function Profile() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto", paddingBottom: 4 }}>
         <button style={tabBtn("profile")} onClick={() => setTab("profile")}>👤 Profile</button>
         <button style={tabBtn("settings")} onClick={() => setTab("settings")}>⚙️ Settings</button>
+        <button style={tabBtn("privileges")} onClick={() => setTab("privileges")}>🔑 Privileges</button>
         <button style={tabBtn("security")} onClick={() => setTab("security")}>🔒 Security</button>
         <button style={tabBtn("account")} onClick={() => setTab("account")}>🗑️ Account</button>
       </div>
@@ -303,6 +331,39 @@ export default function Profile() {
             </div>
           </div>
         </>
+      )}
+
+      {tab === "privileges" && (
+        <div className="card">
+          <div className="card-title">🔑 Your Role</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+            <RoleBadge role={userProfile?.role} />
+            <span style={{ fontSize: 13, color: "var(--text2)" }}>
+              {userProfile?.city ? "Scoped to " + userProfile.city : "No city scope"}
+            </span>
+          </div>
+
+          <div className="card-title" style={{ marginTop: 4 }}>Enter a Privilege Code</div>
+          <p style={{ fontSize: 12.5, color: "var(--text2)", marginBottom: 14, lineHeight: 1.6 }}>
+            If someone above you in the community structure (a governor, president, embassy delegate, or admin)
+            has given you a code, enter it here to be granted that role. Codes expire after 24 hours and only work once.
+          </p>
+          {pcErr && <div className="error-msg">⚠️ {pcErr}</div>}
+          {pcOk && <div className="success-msg">✅ {pcOk}</div>}
+          <form onSubmit={redeemCode} style={{ display: "flex", gap: 10 }}>
+            <input
+              className="form-input"
+              placeholder="e.g. 7K9M2P"
+              value={pcInput}
+              onChange={e => setPcInput(e.target.value.toUpperCase())}
+              style={{ letterSpacing: 2, fontWeight: 700, margin: 0 }}
+              maxLength={6}
+            />
+            <button type="submit" className="btn-primary" style={{ margin: 0, width: "auto", padding: "11px 22px" }} disabled={pcRedeeming || !pcInput.trim()}>
+              {pcRedeeming ? "Checking..." : "Redeem"}
+            </button>
+          </form>
+        </div>
       )}
 
       {tab === "security" && (

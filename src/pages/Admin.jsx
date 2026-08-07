@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { collection, onSnapshot, doc, updateDoc, addDoc, serverTimestamp, query, orderBy, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
-import { useAuth, ROLE_INFO } from "../contexts/AuthContext";
+import { useAuth, ROLE_INFO, ROLE_LEVELS } from "../contexts/AuthContext";
 import { timeAgo, isUserOnline } from "../lib/helpers";
+import { issuePrivilegeCode } from "../lib/privilegeCodes";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
 import UserProfileModal from "../components/UserProfileModal";
@@ -52,6 +53,14 @@ export default function Admin() {
   const [nUrgent, setNUrgent] = useState(false);
   const [sending, setSending] = useState(false);
   const [viewUid, setViewUid] = useState(null);
+  const [issuedCodes, setIssuedCodes] = useState([]);
+  const [pcTargetRole, setPcTargetRole] = useState("governor");
+  const [pcTargetEmail, setPcTargetEmail] = useState("");
+  const [pcScopeCity, setPcScopeCity] = useState("");
+  const [pcNote, setPcNote] = useState("");
+  const [pcIssuing, setPcIssuing] = useState(false);
+  const [pcError, setPcError] = useState("");
+  const [pcLastIssued, setPcLastIssued] = useState(null);
 
   useEffect(() => {
     if (!document.getElementById("ad-css")) {
@@ -67,7 +76,8 @@ export default function Admin() {
     const u3 = onSnapshot(collection(db, "listings"), s => setListings(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
     const u4 = onSnapshot(query(collection(db, "posts"), orderBy("createdAt", "desc")), s => setPosts(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
     const u5 = onSnapshot(query(collection(db, "notifications"), orderBy("createdAt", "desc")), s => setNotices(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    const u6 = onSnapshot(query(collection(db, "privilegeCodes"), orderBy("createdAt", "desc")), s => setIssuedCodes(s.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, []);
 
   if (!isStaff) {
@@ -92,6 +102,39 @@ export default function Admin() {
     await updateDoc(doc(db, "users", u.uid), { role });
     await addDoc(collection(db, "notifications"), { recipientId: u.uid, icon: "🎖️", title: "Role updated", message: "Your role is now " + (ROLE_INFO[role]?.label || role) + ".", link: "/dashboard/profile", read: false, createdAt: serverTimestamp() }).catch(() => {});
   };
+
+  // Issues a time-limited privilege code — only someone above the target role's level
+  // can issue one (enforced inside issuePrivilegeCode). Nobody self-serves a role here;
+  // the recipient still has to actively enter the code themselves in their own Profile.
+  const issueCode = async (e) => {
+    e.preventDefault();
+    setPcError(""); setPcIssuing(true); setPcLastIssued(null);
+    try {
+      const result = await issuePrivilegeCode({
+        issuerId: currentUser.uid, issuerName: userProfile.fullName, issuerRole: userProfile.role,
+        targetRole: pcTargetRole,
+        targetEmail: pcTargetEmail.trim() || null,
+        scopeCity: pcTargetRole === "governor" ? (pcScopeCity.trim() || null) : null,
+        note: pcNote.trim(),
+      });
+      setPcLastIssued(result);
+      setPcTargetEmail(""); setPcScopeCity(""); setPcNote("");
+    } catch (err) {
+      setPcError(err.message || "Could not issue code.");
+    }
+    setPcIssuing(false);
+  };
+
+  const revokeCode = async (codeDoc) => {
+    if (codeDoc.status !== "unused") return;
+    if (window.confirm("Revoke this unused code? It will no longer work if entered.")) {
+      await updateDoc(doc(db, "privilegeCodes", codeDoc.id), { status: "revoked", revokedBy: currentUser.uid, revokedAt: serverTimestamp() });
+    }
+  };
+
+  // Roles this admin is actually allowed to issue codes for — strictly below their own level.
+  const issuableRoles = Object.keys(ROLE_LEVELS).filter(r => ROLE_LEVELS[r] < (level ?? 0) && r !== "student");
+
   const resolveReport = async r => { await updateDoc(doc(db, "reports", r.id), { status: "resolved", resolvedBy: currentUser.uid }); };
   const removeListing = async id => { if (window.confirm("Remove this listing?")) await updateDoc(doc(db, "listings", id), { status: "closed" }); };
   const removePost = async id => { if (window.confirm("Delete this post?")) await deleteDoc(doc(db, "posts", id)); };
@@ -168,6 +211,7 @@ export default function Admin() {
     { k: "reports", l: "🚩 Reports" + (openReports ? " (" + openReports + ")" : "") },
     { k: "content", l: "📝 Content" },
     { k: "broadcast", l: "📢 Broadcast" },
+    { k: "privileges", l: "🔑 Privileges" },
   ];
 
   return (
@@ -365,6 +409,81 @@ export default function Admin() {
               </div>
             ))}
             {notices.filter(n => n.recipientId === "ALL").length === 0 && <p style={{ color: "var(--text2)", fontSize: 13.5 }}>No announcements sent yet.</p>}
+          </div>
+        </>
+      )}
+
+      {tab === "privileges" && (
+        <>
+          <div className="card">
+            <div className="card-title">🔑 Issue a Privilege Code</div>
+            <p style={{ fontSize: 12.5, color: "var(--text2)", marginBottom: 14, lineHeight: 1.6 }}>
+              You can only issue codes for roles below your own ({ROLE_INFO[userProfile?.role]?.label || userProfile?.role}).
+              The code expires in 24 hours and can only be used once. The recipient enters it themselves in their Profile —
+              nobody's role changes until they do that.
+            </p>
+            {issuableRoles.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--text2)" }}>Your current role cannot issue privilege codes.</p>
+            ) : (
+              <form onSubmit={issueCode}>
+                {pcError && <div className="error-msg">⚠️ {pcError}</div>}
+                {pcLastIssued && (
+                  <div className="success-msg" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div>✅ Code issued: <strong style={{ fontSize: 16, letterSpacing: 2 }}>{pcLastIssued.code}</strong></div>
+                    <div style={{ fontSize: 12 }}>Give this to the person directly (message, in person). It expires {new Date(pcLastIssued.expiresAt).toLocaleString()}.</div>
+                  </div>
+                )}
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Grant Role</label>
+                    <select className="form-input" value={pcTargetRole} onChange={e => setPcTargetRole(e.target.value)}>
+                      {issuableRoles.map(r => <option key={r} value={r}>{ROLE_INFO[r]?.label || r}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Restrict to Email (optional)</label>
+                    <input className="form-input" type="email" placeholder="person@email.com" value={pcTargetEmail} onChange={e => setPcTargetEmail(e.target.value)} />
+                  </div>
+                </div>
+                {pcTargetRole === "governor" && (
+                  <div className="form-group">
+                    <label className="form-label">Scope to City</label>
+                    <input className="form-input" placeholder="e.g. Oran" value={pcScopeCity} onChange={e => setPcScopeCity(e.target.value)} />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label className="form-label">Note (optional, visible to you only)</label>
+                  <input className="form-input" placeholder="e.g. Agreed at Saturday meeting" value={pcNote} onChange={e => setPcNote(e.target.value)} />
+                </div>
+                <button type="submit" className="btn-primary" disabled={pcIssuing}>{pcIssuing ? "Issuing..." : "🔑 Issue Code"}</button>
+              </form>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-title">📋 Issued Codes History</div>
+            {issuedCodes.length === 0 && <p style={{ color: "var(--text2)", fontSize: 13.5 }}>No codes issued yet.</p>}
+            {issuedCodes.slice(0, 30).map(c => {
+              const expiresAt = c.expiresAt?.toDate ? c.expiresAt.toDate() : new Date(c.expiresAt);
+              const expired = Date.now() > expiresAt.getTime() && c.status === "unused";
+              const statusLabel = c.status === "used" ? "✅ Used" : c.status === "revoked" ? "🚫 Revoked" : expired ? "⌛ Expired" : "🕐 Unused";
+              return (
+                <div key={c.id} className="ad-row">
+                  <div className="ad-i">
+                    <div className="ad-n" style={{ letterSpacing: 1.5 }}>{c.code} — {ROLE_INFO[c.targetRole]?.label || c.targetRole} {statusLabel}</div>
+                    <div className="ad-m">
+                      Issued by {c.issuerName} · {timeAgo(c.createdAt)}
+                      {c.targetEmail ? " · for " + c.targetEmail : ""}
+                      {c.scopeCity ? " · scoped to " + c.scopeCity : ""}
+                      {c.note ? " · " + c.note : ""}
+                    </div>
+                  </div>
+                  {c.status === "unused" && !expired && (
+                    <button className="ad-b bad" onClick={() => revokeCode(c)}>🚫 Revoke</button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}
