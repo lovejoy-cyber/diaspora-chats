@@ -1,31 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, limit, onSnapshot, updateDoc, doc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
-import { isUserOnline, threadId } from "../lib/helpers";
+import { isUserOnline, threadId, AGORA_APP_ID, fetchAgoraToken, callChannelId } from "../lib/helpers";
+import { placeCall, updateCallStatus } from "../lib/callSignaling";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
-
-const AGORA_APP_ID = import.meta.env.VITE_AGORA_APP_ID || "239608a7432f4a6facc81a29d4c7d71f";
-
-// Fetches a fresh, short-lived token from our own serverless function before every call —
-// this is what makes calls keep working permanently even though the Agora project is in
-// Secured Mode. Falls back to null (works only if the project is in open Testing Mode)
-// if the token function is ever unreachable, so a misconfigured deploy fails loudly via
-// Agora's own error rather than silently.
-async function fetchAgoraToken(channel, uid) {
-  try {
-    const res = await fetch("/.netlify/functions/generate-agora-token?channel=" + encodeURIComponent(channel) + "&uid=" + encodeURIComponent(uid));
-    if (!res.ok) throw new Error("Token server returned " + res.status);
-    const data = await res.json();
-    if (!data.token) throw new Error("Token server response missing token");
-    return data.token;
-  } catch (err) {
-    console.error("Could not fetch Agora token, falling back to null (only works in Testing Mode):", err);
-    return null;
-  }
-}
 
 const CSS = `
 .cl{padding:16px 14px;overflow-y:auto;height:100%}
@@ -63,6 +44,18 @@ const CSS = `
 .cl-ring{animation:clRing .9s ease-in-out infinite}
 @keyframes clRing{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
 .cl-note{font-size:11.5px;color:var(--text3);text-align:center;margin-top:12px;line-height:1.6}
+.cl-recent{margin-top:26px}
+.cl-recent-title{font-size:13px;font-weight:750;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.cl-rrow{display:flex;align-items:center;gap:11px;padding:9px 4px;border-bottom:1px solid rgba(255,255,255,.04)}
+.cl-rrow-info{flex:1;min-width:0}
+.cl-rrow-name{font-size:13px;font-weight:650;display:flex;align-items:center;gap:6px}
+.cl-rrow-meta{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px;margin-top:1px}
+.cl-rrow-icon{font-size:13px}
+.cl-rrow-icon.missed{color:#ef4444}
+.cl-rrow-icon.declined{color:#f59e0b}
+.cl-rrow-icon.ended,.cl-rrow-icon.accepted{color:#10b981}
+.cl-rrow-time{font-size:10.5px;color:var(--text3);flex-shrink:0}
+.cl-rrow-callback{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);color:var(--primary-light);width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:13px}
 `;
 
 const fmt = s => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
@@ -85,6 +78,26 @@ export default function Calls() {
   const localRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [callError, setCallError] = useState("");
+  const [localCamTrack, setLocalCamTrack] = useState(null);
+  const [remoteVideoTrack, setRemoteVideoTrack] = useState(null);
+  const [activeCallId, setActiveCallId] = useState(null);
+  const [recentCalls, setRecentCalls] = useState([]);
+  const [limitError, setLimitError] = useState("");
+
+  // Plays the local camera preview the moment the video box actually exists in the DOM —
+  // fixes the black-screen bug, which was caused by a fixed setTimeout racing against a
+  // conditionally-rendered <div> that didn't exist yet when the timer fired.
+  useEffect(() => {
+    if (localCamTrack && localRef.current) {
+      localCamTrack.play(localRef.current);
+    }
+  }, [localCamTrack, state]);
+
+  useEffect(() => {
+    if (remoteVideoTrack && remoteRef.current) {
+      remoteVideoTrack.play(remoteRef.current);
+    }
+  }, [remoteVideoTrack, state]);
 
   // Auto-start a call if we arrived here from a chat header (?call=uid&type=voice)
   useEffect(() => {
@@ -98,6 +111,43 @@ export default function Calls() {
     }
     // eslint-disable-next-line
   }, [searchParams, users]);
+
+  // Accepting an incoming call from IncomingCallListener — the caller already created the
+  // "ringing" doc and channel, so we join directly rather than going through placeCall again.
+  useEffect(() => {
+    const joinChannel = searchParams.get("join");
+    const joinType = searchParams.get("type");
+    const callId = searchParams.get("callId");
+    const withUid = searchParams.get("withUid");
+    const withName = searchParams.get("withName");
+    const withPhoto = searchParams.get("withPhoto");
+    if (!joinChannel || !callId) return;
+    setTarget({ uid: withUid, fullName: withName ? decodeURIComponent(withName) : "Caller", photoURL: withPhoto ? decodeURIComponent(withPhoto) : "" });
+    setGroup(false);
+    join(joinChannel, joinType || "voice", withName, callId);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line
+  }, [searchParams]);
+
+  // Recent Calls log — merges "calls I made" and "calls I received" into one
+  // chronological list, like every phone's native call history.
+  useEffect(() => {
+    if (!currentUser) return;
+    let mineAsCaller = [], mineAsRecipient = [];
+    const merge = () => {
+      const combined = [...mineAsCaller, ...mineAsRecipient].sort((a, b) => {
+        const ta = a.createdAt?.toDate?.()?.getTime?.() || 0;
+        const tb = b.createdAt?.toDate?.()?.getTime?.() || 0;
+        return tb - ta;
+      });
+      setRecentCalls(combined.slice(0, 30));
+    };
+    const qCaller = query(collection(db, "calls"), where("callerId", "==", currentUser.uid), orderBy("createdAt", "desc"), limit(30));
+    const qRecipient = query(collection(db, "calls"), where("recipientId", "==", currentUser.uid), orderBy("createdAt", "desc"), limit(30));
+    const unsub1 = onSnapshot(qCaller, snap => { mineAsCaller = snap.docs.map(d => ({ id: d.id, ...d.data(), direction: "outgoing" })); merge(); }, () => {});
+    const unsub2 = onSnapshot(qRecipient, snap => { mineAsRecipient = snap.docs.map(d => ({ id: d.id, ...d.data(), direction: "incoming" })); merge(); }, () => {});
+    return () => { unsub1(); unsub2(); };
+  }, [currentUser]);
 
   useEffect(() => {
     if (!document.getElementById("cl-css")) {
@@ -124,8 +174,9 @@ export default function Calls() {
     return () => clearInterval(timerRef.current);
   }, [state]);
 
-  const join = async (channel, callType, label) => {
+  const join = async (channel, callType, label, callId) => {
     setType(callType); setState("calling");
+    if (callId) setActiveCallId(callId);
     try {
       const AgoraRTC = (await import("agora-rtc-sdk-ng")).default;
       AgoraRTC.setLogLevel(4);
@@ -139,20 +190,22 @@ export default function Calls() {
       if (callType === "video") {
         const cam = await AgoraRTC.createCameraVideoTrack();
         tracks.push(cam);
-        setTimeout(() => { if (localRef.current) cam.play(localRef.current); }, 300);
+        setLocalCamTrack(cam); // triggers the useEffect above once the DOM box exists
       }
       await client.publish(tracks);
       tracksRef.current = tracks;
       client.on("user-published", async (user, media) => {
         await client.subscribe(user, media);
         if (media === "audio") { user.audioTrack.play(); setState("in-call"); }
-        if (media === "video") { setState("in-call"); setTimeout(() => { if (remoteRef.current) user.videoTrack.play(remoteRef.current); }, 200); }
+        if (media === "video") { setState("in-call"); setRemoteVideoTrack(user.videoTrack); }
       });
       client.on("user-left", () => { if (client.remoteUsers.length === 0) end(); });
       setTimeout(() => setState(s => s === "calling" ? "in-call" : s), 4000);
     } catch (e) {
       console.error("Call error:", e);
       setState("idle"); setTarget(null); setGroup(false);
+      if (callId) updateCallStatus(callId, "failed").catch(() => {});
+      setActiveCallId(null);
       const code = e?.code || "";
       const msg = e?.message || String(e);
       let friendly = "Could not start the call. ";
@@ -169,7 +222,24 @@ export default function Calls() {
     }
   };
 
-  const callUser = (u, t) => { setTarget(u); setGroup(false); join(threadId(currentUser.uid, u.uid).slice(0, 60), t, u.fullName); };
+  // Outgoing call: writes a "ringing" doc first (so the other person's IncomingCallListener
+  // sees it), respects the daily per-recipient limit, THEN joins Agora once placed.
+  const callUser = async (u, t) => {
+    setLimitError("");
+    setTarget(u); setGroup(false);
+    const channel = callChannelId(currentUser.uid, u.uid);
+    try {
+      const { callId } = await placeCall({
+        callerId: currentUser.uid, callerName: userProfile.fullName, callerPhoto: userProfile.photoURL,
+        recipientId: u.uid, recipientName: u.fullName, callType: t,
+      });
+      join(channel, t, u.fullName, callId);
+    } catch (e) {
+      if (e.code === "DAILY_LIMIT_REACHED") { setLimitError(e.message); setTarget(null); }
+      else { setCallError("Could not place the call. Please try again."); setTarget(null); }
+    }
+  };
+
   const startGroup = (t) => {
     const room = "group_" + (userProfile?.nationality || "all").toLowerCase().replace(/[^a-z]/g, "");
     setTarget({ fullName: (userProfile?.nationality || "Community") + " Group Call", photoURL: "" });
@@ -181,8 +251,12 @@ export default function Calls() {
       tracksRef.current.forEach(t => { try { t.stop(); t.close(); } catch (e) {} });
       if (clientRef.current) await clientRef.current.leave();
     } catch (e) {}
+    if (activeCallId) {
+      updateCallStatus(activeCallId, "ended").catch(() => {});
+    }
     clientRef.current = null; tracksRef.current = [];
     setState("idle"); setTarget(null); setMuted(false); setCamOff(false); setGroup(false);
+    setLocalCamTrack(null); setRemoteVideoTrack(null); setActiveCallId(null);
   };
 
   const toggleMute = () => {
@@ -214,6 +288,12 @@ export default function Calls() {
           <button onClick={() => setCallError("")} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 15 }}>✕</button>
         </div>
       )}
+      {limitError && (
+        <div className="error-msg" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: "rgba(245,158,11,.08)", borderColor: "rgba(245,158,11,.25)", color: "#fcd34d" }}>
+          <span>📵 {limitError}</span>
+          <button onClick={() => setLimitError("")} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 15 }}>✕</button>
+        </div>
+      )}
 
       <div className="cl-grid">
         {list.map(u => (
@@ -234,9 +314,43 @@ export default function Calls() {
         Group calls use your country room channel. Best with small groups on the free plan.
       </div>
 
+      {recentCalls.length > 0 && (
+        <div className="cl-recent">
+          <div className="cl-recent-title">🕐 Recent Calls</div>
+          {recentCalls.map(c => {
+            const otherName = c.direction === "outgoing" ? c.recipientName : c.callerName;
+            const otherPhoto = c.direction === "outgoing" ? "" : c.callerPhoto;
+            const otherUid = c.direction === "outgoing" ? c.recipientId : c.callerId;
+            const icon = c.direction === "outgoing" ? "↗️" : "↙️";
+            const statusIcon = c.status === "missed" ? "📵" : c.status === "declined" ? "🚫" : c.status === "failed" ? "⚠️" : c.callType === "video" ? "📹" : "📞";
+            const statusLabel = c.status === "missed" ? "Missed" : c.status === "declined" ? "Declined" : c.status === "failed" ? "Failed" : c.status === "ringing" ? "Ringing" : c.status === "accepted" ? "Connected" : "Ended";
+            const t = c.createdAt?.toDate ? c.createdAt.toDate() : null;
+            return (
+              <div key={c.id} className="cl-rrow">
+                <span className="cl-rrow-icon">{icon}</span>
+                <Avatar src={otherPhoto} name={otherName} size={34} />
+                <div className="cl-rrow-info">
+                  <div className="cl-rrow-name">{otherName}</div>
+                  <div className="cl-rrow-meta">
+                    <span className={"cl-rrow-icon " + c.status}>{statusIcon}</span> {statusLabel}
+                  </div>
+                </div>
+                <span className="cl-rrow-time">{t ? t.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}</span>
+                {(c.status === "missed" || c.status === "declined") && otherUid && (
+                  <button className="cl-rrow-callback" title="Call back" onClick={() => {
+                    const u = users.find(x => x.uid === otherUid);
+                    if (u) callUser(u, c.callType || "voice");
+                  }}>📞</button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {state !== "idle" && target && (
         <div className="cl-modal">
-          {type === "video" && state === "in-call" && (
+          {type === "video" && (state === "in-call" || (state === "calling" && localCamTrack)) && (
             <div className="cl-vid">
               <div ref={remoteRef} style={{ width: "100%", height: "100%" }} />
               <span className="cl-vid-lbl">{target.fullName}</span>

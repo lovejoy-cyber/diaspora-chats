@@ -124,6 +124,7 @@ export default function Feed() {
           recipientId: "ALL", urgent: true, icon: "🚨",
           title: "Urgent notice",
           message: userProfile.fullName + " posted an urgent notice: " + text.trim().slice(0, 80),
+          link: "/dashboard",
           read: false, createdAt: serverTimestamp(),
         }).catch(() => {});
       }

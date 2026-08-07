@@ -83,14 +83,14 @@ export default function Admin() {
   }
 
   const verify = async u => { await updateDoc(doc(db, "users", u.uid), { verified: true, verifiedBy: currentUser.uid, verifiedAt: serverTimestamp() });
-    await addDoc(collection(db, "notifications"), { recipientId: u.uid, icon: "✅", title: "Account verified", message: "Your account has been verified by the embassy. You now have full access.", read: false, createdAt: serverTimestamp() }).catch(() => {}); };
+    await addDoc(collection(db, "notifications"), { recipientId: u.uid, icon: "✅", title: "Account verified", message: "Your account has been verified by the embassy. You now have full access.", link: "/dashboard/profile", read: false, createdAt: serverTimestamp() }).catch(() => {}); };
   const unverify = async u => { await updateDoc(doc(db, "users", u.uid), { verified: false }); };
   const suspend = async u => { if (window.confirm("Suspend " + u.fullName + "?")) await updateDoc(doc(db, "users", u.uid), { suspended: true, suspendedAt: serverTimestamp() }); };
   const restore = async u => { await updateDoc(doc(db, "users", u.uid), { suspended: false }); };
   const setRole = async (u, role) => {
     if (!isAdmin) return alert("Only administrators can change roles.");
     await updateDoc(doc(db, "users", u.uid), { role });
-    await addDoc(collection(db, "notifications"), { recipientId: u.uid, icon: "🎖️", title: "Role updated", message: "Your role is now " + (ROLE_INFO[role]?.label || role) + ".", read: false, createdAt: serverTimestamp() }).catch(() => {});
+    await addDoc(collection(db, "notifications"), { recipientId: u.uid, icon: "🎖️", title: "Role updated", message: "Your role is now " + (ROLE_INFO[role]?.label || role) + ".", link: "/dashboard/profile", read: false, createdAt: serverTimestamp() }).catch(() => {});
   };
   const resolveReport = async r => { await updateDoc(doc(db, "reports", r.id), { status: "resolved", resolvedBy: currentUser.uid }); };
   const removeListing = async id => { if (window.confirm("Remove this listing?")) await updateDoc(doc(db, "listings", id), { status: "closed" }); };
@@ -102,7 +102,7 @@ export default function Admin() {
     setSending(true);
     await addDoc(collection(db, "notifications"), {
       recipientId: "ALL", urgent: nUrgent, icon: nUrgent ? "🚨" : "📢",
-      title: nTitle.trim(), message: nBody.trim(),
+      title: nTitle.trim(), message: nBody.trim(), link: "/dashboard",
       postedBy: userProfile.fullName, read: false, createdAt: serverTimestamp(),
     });
     await addDoc(collection(db, "posts"), {

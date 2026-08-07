@@ -118,3 +118,35 @@ export function groupMessages(messages, gapSeconds = 300) {
     };
   });
 }
+
+// ─── Shared Agora call helpers ───────────────────────────────────────────
+// Used by both the Calls page (outgoing) and IncomingCallListener (ringing/accepting)
+// so there's exactly one implementation of "how we talk to Agora," not two that can drift apart.
+
+export const AGORA_APP_ID = "239608a7432f4a6facc81a29d4c7d71f";
+
+export async function fetchAgoraToken(channel, uid) {
+  try {
+    const res = await fetch("/.netlify/functions/generate-agora-token?channel=" + encodeURIComponent(channel) + "&uid=" + encodeURIComponent(uid));
+    if (!res.ok) throw new Error("Token server returned " + res.status);
+    const data = await res.json();
+    if (!data.token) throw new Error("Token server response missing token");
+    return data.token;
+  } catch (err) {
+    console.error("Could not fetch Agora token, falling back to null (only works in Testing Mode):", err);
+    return null;
+  }
+}
+
+// Builds a stable, unique channel name for a 1-to-1 call between two people —
+// same pair always gets the same channel regardless of who initiates.
+export function callChannelId(uidA, uidB) {
+  return "call_" + [uidA, uidB].sort().join("_").slice(0, 60);
+}
+
+// Daily per-recipient call limit (see CALLS.md discussion) — protects people from being
+// spammed with repeated calls and helps keep everyone within the free Agora usage tier.
+export const MAX_CALLS_PER_RECIPIENT_PER_DAY = 4;
+
+// How long an unanswered call rings before it's automatically marked "missed."
+export const CALL_RING_TIMEOUT_MS = 22000;

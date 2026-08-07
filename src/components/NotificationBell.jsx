@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { collection, query, where, onSnapshot, updateDoc, doc, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { timeAgo } from "../lib/helpers";
 
 const CSS = `
@@ -36,23 +37,42 @@ const CSS = `
 
 export default function NotificationBell() {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [msgUnread, setMsgUnread] = useState(0);
+  const [unreadConvos, setUnreadConvos] = useState([]);
   const wrapRef = useRef(null);
 
-  // Watch conversations for unread message counts so the bell reacts to new DMs too
+  // Watch conversations for unread message counts so the bell reacts to new DMs too —
+  // also keeps the actual conversation list so notifications can be clicked straight
+  // through to the right chat, not just show a number.
   useEffect(() => {
     if (!currentUser) return;
     const q = query(collection(db, "conversations"), where("participants", "array-contains", currentUser.uid));
     return onSnapshot(q, snap => {
       let total = 0;
+      const convos = [];
       snap.docs.forEach(d => {
         const data = d.data();
         if (data["muted_" + currentUser.uid]) return; // muted chats don't light up the bell
-        total += data["unread_" + currentUser.uid] || 0;
+        const count = data["unread_" + currentUser.uid] || 0;
+        total += count;
+        if (count > 0) {
+          const otherId = data.participants?.find(p => p !== currentUser.uid);
+          convos.push({
+            id: d.id, otherId,
+            otherName: data.participantNames?.[otherId] || "Member",
+            otherPhoto: data.participantPhotos?.[otherId] || "",
+            lastMessage: data.lastMessage || "",
+            unreadCount: count,
+            lastMessageAt: data.lastMessageAt,
+          });
+        }
       });
+      convos.sort((a, b) => (b.lastMessageAt?.toDate?.()?.getTime?.() || 0) - (a.lastMessageAt?.toDate?.()?.getTime?.() || 0));
       setMsgUnread(total);
+      setUnreadConvos(convos);
     }, err => console.error("Bell: conversation listener failed:", err));
   }, [currentUser]);
 
@@ -131,9 +151,30 @@ export default function NotificationBell() {
             {unread.length > 0 && <button className="nb-clear" onClick={markAll}>Mark all read</button>}
           </div>
           <div className="nb-list">
-            {items.length === 0 && <div className="nb-empty">No notifications yet</div>}
+            {items.length === 0 && unreadConvos.length === 0 && <div className="nb-empty">No notifications yet</div>}
+            {unreadConvos.map(c => (
+              <div
+                key={c.id}
+                className="nb-item unread"
+                onClick={() => { setOpen(false); navigate("/dashboard/messages?start=" + c.otherId); }}
+              >
+                <span style={{ fontSize: 17 }}>💬</span>
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 2 }}>
+                    {c.otherName} {c.unreadCount > 1 && <span style={{ color: "var(--primary-light)" }}>({c.unreadCount})</span>}
+                  </div>
+                  <div className="nb-txt">{c.lastMessage || "New message"}</div>
+                  <div className="nb-time">{timeAgo(c.lastMessageAt)}</div>
+                </div>
+              </div>
+            ))}
             {items.map(n => (
-              <div key={n.id} className={"nb-item" + (isRead(n) ? "" : n.urgent ? " urgent" : " unread")}>
+              <div
+                key={n.id}
+                className={"nb-item" + (isRead(n) ? "" : n.urgent ? " urgent" : " unread")}
+                onClick={n.link ? () => { setOpen(false); navigate(n.link); } : undefined}
+                style={n.link ? { cursor: "pointer" } : undefined}
+              >
                 <span style={{ fontSize: 17 }}>{n.icon || (n.urgent ? "🚨" : "🔔")}</span>
                 <div>
                   {n.title && <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 2 }}>{n.title}</div>}

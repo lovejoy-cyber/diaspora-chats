@@ -14,6 +14,7 @@ import Calls from "./Calls";
 import ViewProfile from "./ViewProfile";
 import NotificationBell from "../components/NotificationBell";
 import GlobalSearch from "../components/GlobalSearch";
+import IncomingCallListener from "../components/IncomingCallListener";
 
 const ROLE_LABELS = {
   admin: {label:"Super Admin", cls:"role-badge-admin"},
@@ -177,6 +178,7 @@ export default function Dashboard() {
           )}
         </nav>
       </main>
+      <IncomingCallListener />
     </div>
   );
 }
