@@ -133,6 +133,7 @@ export default function Dashboard() {
               </div>
               <div onClick={()=>{navigate("/dashboard/profile");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>👤 My Profile</div>
               <div onClick={()=>{navigate("/dashboard/rooms");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>🌍 Rooms & Groups</div>
+              <div onClick={()=>{navigate("/dashboard/people");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>👥 People</div>
               {isStaff && (
                 <div onClick={()=>{navigate("/dashboard/admin");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>🛡️ Admin Panel</div>
               )}
@@ -163,21 +164,15 @@ export default function Dashboard() {
           <NavLink to="/dashboard/messages" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
             <span className="mobile-nav-icon">💬</span>Chat
           </NavLink>
+          <NavLink to="/dashboard/market" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
+            <span className="mobile-nav-icon">🛍️</span>Market
+          </NavLink>
           <NavLink to="/dashboard/rooms" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
             <span className="mobile-nav-icon">🌍</span>Rooms
           </NavLink>
           <NavLink to="/dashboard/calls" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
             <span className="mobile-nav-icon">📞</span>Calls
           </NavLink>
-          {isStaff ? (
-            <NavLink to="/dashboard/admin" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
-              <span className="mobile-nav-icon">🛡️</span>Admin
-            </NavLink>
-          ) : (
-            <NavLink to="/dashboard/people" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
-              <span className="mobile-nav-icon">👥</span>People
-            </NavLink>
-          )}
         </nav>
       </main>
       <IncomingCallListener />

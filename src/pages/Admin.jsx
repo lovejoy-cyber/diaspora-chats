@@ -318,7 +318,7 @@ export default function Admin() {
             <div key={r.id} className="ad-row">
               <div className="ad-i">
                 <div className="ad-n">
-                  🚩 {r.reportedName}
+                  🚩 {r.reportedName || r.reportedUserName}
                   <span className={"ad-st " + (r.status === "open" ? "p" : "v")}>{r.status === "open" ? "Open" : "Resolved"}</span>
                 </div>
                 <div className="ad-m">
@@ -328,10 +328,10 @@ export default function Admin() {
                 </div>
               </div>
               <div className="ad-acts">
-                <button className="ad-b info" onClick={() => setViewUid(r.reportedUid)}>View Profile</button>
+                <button className="ad-b info" onClick={() => setViewUid(r.reportedUid || r.reportedUserId)}>View Profile</button>
                 {r.status === "open" && (
                   <>
-                    <button className="ad-b bad" onClick={() => { const u = users.find(x => x.uid === r.reportedUid); if (u) suspend(u); }}>⊘ Suspend</button>
+                    <button className="ad-b bad" onClick={() => { const u = users.find(x => x.uid === (r.reportedUid || r.reportedUserId)); if (u) suspend(u); }}>⊘ Suspend</button>
                     <button className="ad-b ok" onClick={() => resolveReport(r)}>✓ Resolve</button>
                   </>
                 )}

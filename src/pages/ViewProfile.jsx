@@ -104,7 +104,7 @@ export default function ViewProfile() {
       reporterName: userProfile.fullName,
       reason: reportReason,
       details: reportDetails.trim(),
-      status: "pending",
+      status: "open",
       createdAt: serverTimestamp(),
     });
     setSubmitting(false);

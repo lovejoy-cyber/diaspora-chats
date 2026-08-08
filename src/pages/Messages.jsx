@@ -141,8 +141,10 @@ export default function Messages() {
   const [sending, setSending] = useState(false);
   const [members, setMembers] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
+  const [forwardingMsg, setForwardingMsg] = useState(null);
   const [pickerSearch, setPickerSearch] = useState("");
   const [search, setSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
   const [showRx, setShowRx] = useState(null);
   const [recording, setRecording] = useState(false);
@@ -290,6 +292,50 @@ export default function Messages() {
     } catch (e) { /* listing lookup failing shouldn't block the conversation from opening */ }
   };
 
+  // Forwards a message's content into a (possibly brand new) conversation with the chosen
+  // person, tagged as forwarded so the recipient knows it originated elsewhere.
+  const forwardMessageTo = async (member) => {
+    if (!forwardingMsg) return;
+    setShowPicker(false);
+    const tid = threadId(currentUser.uid, member.uid);
+    let convId = tid;
+    const existingLocal = conversations.find(c => c.id === tid);
+    if (!existingLocal) {
+      const existingSnap = await getDoc(doc(db, "conversations", tid));
+      if (!existingSnap.exists()) {
+        await setDoc(doc(db, "conversations", tid), {
+          participants: [currentUser.uid, member.uid],
+          participantNames: { [currentUser.uid]: userProfile.fullName, [member.uid]: member.fullName },
+          participantPhotos: { [currentUser.uid]: userProfile.photoURL || "", [member.uid]: member.photoURL || "" },
+          lastMessage: "", lastMessageAt: serverTimestamp(), createdAt: serverTimestamp(),
+        });
+      }
+    }
+    const forwardPayload = {
+      senderId: currentUser.uid, senderName: userProfile.fullName, senderPhoto: userProfile.photoURL || "",
+      createdAt: serverTimestamp(), deleted: false, readBy: [currentUser.uid], reactions: {},
+      forwarded: true,
+      type: forwardingMsg.type || "text",
+      text: forwardingMsg.text || "",
+      imageUrl: forwardingMsg.imageUrl || null,
+      audioUrl: forwardingMsg.audioUrl || null,
+      docUrl: forwardingMsg.docUrl || null,
+      docName: forwardingMsg.docName || null,
+    };
+    await addDoc(collection(db, "conversations", convId, "messages"), forwardPayload);
+    await updateDoc(doc(db, "conversations", convId), {
+      lastMessage: "↪ Forwarded: " + (forwardingMsg.text || (forwardingMsg.imageUrl ? "Photo" : forwardingMsg.audioUrl ? "Voice message" : "Document")),
+      lastMessageAt: serverTimestamp(),
+      lastSenderId: currentUser.uid,
+      ["unread_" + member.uid]: 1,
+    });
+    setForwardingMsg(null);
+    if (active?.id !== convId) {
+      setActive({ id: convId, participants: [currentUser.uid, member.uid], participantNames: { [currentUser.uid]: userProfile.fullName, [member.uid]: member.fullName }, participantPhotos: { [currentUser.uid]: userProfile.photoURL || "", [member.uid]: member.photoURL || "" } });
+      setShowSidebar(false);
+    }
+  };
+
   // Throttled typing write — only hits Firestore at most once every 2.5s while typing,
   // instead of on every keystroke (this was the source of the input glitch).
   const throttledTypingRef = useRef(
@@ -323,6 +369,14 @@ export default function Messages() {
     await updateDoc(doc(db, "conversations", active.id), { ["muted_" + currentUser.uid]: !isMuted });
   };
 
+  const isArchived = active?.["archived_" + currentUser.uid] === true;
+  const toggleArchive = async () => {
+    if (!active) return;
+    const next = !isArchived;
+    await updateDoc(doc(db, "conversations", active.id), { ["archived_" + currentUser.uid]: next });
+    if (next) { setActive(null); setShowSidebar(true); } // archiving closes the open thread and returns to the list
+  };
+
   const sendMessage = async overrides => {
     if (!active) return;
     const oid = getOid(active);
@@ -339,6 +393,10 @@ export default function Messages() {
       lastSenderId: currentUser.uid,
       ["unread_" + oid]: (active["unread_" + oid] || 0) + 1,
       ["typing_" + currentUser.uid]: null,
+      // Sending a message un-archives the thread for both people — receiving a real new
+      // message is exactly the moment a conversation shouldn't stay hidden away.
+      ["archived_" + currentUser.uid]: false,
+      ["archived_" + oid]: false,
     });
     setReplyTo(null);
   };
@@ -449,13 +507,21 @@ export default function Messages() {
     });
   }, [conversations]);
 
-  const filteredConvs = dedupedConvs.filter(c => getOName(c).toLowerCase().includes(search.toLowerCase()));
+  const filteredConvs = dedupedConvs
+    .filter(c => showArchived ? c["archived_" + currentUser.uid] === true : c["archived_" + currentUser.uid] !== true)
+    .filter(c => getOName(c).toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="ms">
       <div className={"ms-side" + (showSidebar ? "" : " hidden")}>
         <div className="ms-sh"><input placeholder="🔍 Search conversations..." value={search} onChange={e => setSearch(e.target.value)} /></div>
         <div className="ms-new" onClick={() => setShowPicker(true)}>✏️ New Message</div>
+        <div
+          style={{ padding: "0 12px 8px", fontSize: 11.5, color: "var(--primary-light)", cursor: "pointer", fontWeight: 650 }}
+          onClick={() => setShowArchived(a => !a)}
+        >
+          {showArchived ? "← Back to chats" : "🗄️ View archived chats"}
+        </div>
         <div className="ms-cl">
           {filteredConvs.length === 0 && <div style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--text2)" }}>No conversations yet.<br />Start one above.</div>}
           {filteredConvs.map(c => {
@@ -500,6 +566,7 @@ export default function Messages() {
                     <div className="ms-hmenu-item" onClick={() => { setShowHeaderMenu(false); navigate("/dashboard/calls?call=" + getOid(active) + "&type=video"); }}>📹 Video Call</div>
                     <div className="ms-hmenu-item" onClick={() => { setShowHeaderMenu(false); setShowMsgSearch(true); }}>🔍 Search in Chat</div>
                     <div className="ms-hmenu-item" onClick={() => { setShowHeaderMenu(false); toggleMute(); }}>{isMuted ? "🔔 Unmute" : "🔕 Mute Notifications"}</div>
+                    <div className="ms-hmenu-item" onClick={() => { setShowHeaderMenu(false); toggleArchive(); }}>{isArchived ? "📥 Unarchive" : "🗄️ Archive Chat"}</div>
                     <div className="ms-hmenu-item" onClick={() => { setShowHeaderMenu(false); navigate("/dashboard/user/" + getOid(active)); }}>👤 View Profile</div>
                   </div>
                 )}
@@ -540,6 +607,7 @@ export default function Messages() {
                           <div className="ms-tools">
                             <button className="ms-tool" onClick={() => setShowRx(showRx === msg.id ? null : msg.id)} title="React">😊</button>
                             <button className="ms-tool" onClick={() => setReplyTo(msg)} title="Reply">↩</button>
+                            <button className="ms-tool" onClick={() => { setForwardingMsg(msg); setShowPicker(true); }} title="Forward">➦</button>
                             <button className="ms-tool" onClick={() => toggleStar(msg)} title={msg.starredBy?.includes(currentUser.uid) ? "Unstar" : "Star"}>{msg.starredBy?.includes(currentUser.uid) ? "⭐" : "☆"}</button>
                             {isMine && msg.type === "text" && <button className="ms-tool" onClick={() => startEdit(msg)} title="Edit">✏️</button>}
                             {isMine && <button className="ms-tool" onClick={() => deleteMessage(msg.id)} title="Delete">🗑️</button>}
@@ -566,6 +634,7 @@ export default function Messages() {
                           </div>
                         ) : (
                           <div className={"ms-bub" + (isMine ? " mine" : " theirs") + (msg.isFirstInGroup ? "" : " grouped") + (msg.deleted ? " del" : "")}>
+                            {msg.forwarded && !msg.deleted && <div style={{ fontSize: 10.5, opacity: .7, fontStyle: "italic", marginBottom: 3 }}>➦ Forwarded</div>}
                             {msg.replyTo && !msg.deleted && <div className="ms-quote"><strong>{msg.replyTo.senderName}</strong><br />{msg.replyTo.text}</div>}
                             {msg.type === "image" && msg.imageUrl && !msg.deleted && <img src={msg.imageUrl} alt="" onClick={() => setLightboxSrc(msg.imageUrl)} />}
                             {msg.type === "audio" && msg.audioUrl && !msg.deleted && <AudioPlayer url={msg.audioUrl} />}
@@ -648,13 +717,22 @@ export default function Messages() {
       </div>
 
       {showPicker && (
-        <div className="ms-pop" onClick={() => setShowPicker(false)}>
+        <div className="ms-pop" onClick={() => { setShowPicker(false); setForwardingMsg(null); }}>
           <div className="ms-pop-card" onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: 16, fontWeight: 800 }}>💬 Start a Conversation</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 800 }}>{forwardingMsg ? "➦ Forward to..." : "💬 Start a Conversation"}</h3>
+            {forwardingMsg && (
+              <div className="ms-reply" style={{ margin: 0 }}>
+                <span>
+                  {forwardingMsg.text
+                    ? forwardingMsg.text.slice(0, 60)
+                    : forwardingMsg.imageUrl ? "📷 Photo" : forwardingMsg.audioUrl ? "🎙 Voice message" : "📄 Document"}
+                </span>
+              </div>
+            )}
             <input className="form-input" placeholder="Search members..." onChange={e => setPickerSearch(e.target.value)} />
             <div style={{ overflowY: "auto", flex: 1 }}>
               {members.filter(m => m.fullName?.toLowerCase().includes(pickerSearch.toLowerCase())).map(m => (
-                <div key={m.uid} className="ms-mrow" onClick={() => startConversation(m)}>
+                <div key={m.uid} className="ms-mrow" onClick={() => forwardingMsg ? forwardMessageTo(m) : startConversation(m)}>
                   <Avatar src={m.photoURL} name={m.fullName} size={38} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>{m.fullName}{m.verified && <span className="verified-badge">✓</span>}</div>
@@ -663,7 +741,7 @@ export default function Messages() {
                 </div>
               ))}
             </div>
-            <button className="btn-secondary" onClick={() => setShowPicker(false)}>Cancel</button>
+            <button className="btn-secondary" onClick={() => { setShowPicker(false); setForwardingMsg(null); }}>Cancel</button>
           </div>
         </div>
       )}

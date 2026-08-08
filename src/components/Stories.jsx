@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, arrayUnion, doc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, arrayUnion, doc, updateDoc, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
 import { uploadToCloudinary } from "../lib/helpers";
@@ -53,6 +53,13 @@ export default function Stories() {
   const [viewerGroup, setViewerGroup] = useState(null);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [showViewersList, setShowViewersList] = useState(false);
+  const [viewersInfo, setViewersInfo] = useState([]);
+  const [loadingViewers, setLoadingViewers] = useState(false);
+  const [showReportStory, setShowReportStory] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
   const fileRef = useRef(null);
   const progressTimerRef = useRef(null);
 
@@ -144,6 +151,47 @@ export default function Stories() {
 
   const hasUnseen = group => group.items.some(s => !s.viewedBy?.includes(currentUser.uid));
 
+  // Loads the display names/photos of everyone who has viewed the currently-open status —
+  // only meaningful (and only shown) for your OWN status, same as every real status feature.
+  const loadViewersList = async () => {
+    if (!viewerGroup) return;
+    const currentStory = viewerGroup?.items[viewerIndex];
+    if (!currentStory) return;
+    setLoadingViewers(true);
+    setShowViewersList(true);
+    try {
+      const uids = currentStory.viewedBy || [];
+      if (uids.length === 0) { setViewersInfo([]); setLoadingViewers(false); return; }
+      const snap = await getDocs(collection(db, "users"));
+      const allUsers = snap.docs.map(d => d.data());
+      const matched = uids.map(uid => allUsers.find(u => u.uid === uid)).filter(Boolean);
+      setViewersInfo(matched);
+    } catch (e) { setViewersInfo([]); }
+    setLoadingViewers(false);
+  };
+
+  const submitStoryReport = async () => {
+    if (!reportReason || !viewerGroup) return;
+    setReportSubmitting(true);
+    try {
+      const currentStory = viewerGroup.items[viewerIndex];
+      await addDoc(collection(db, "reports"), {
+        type: "story",
+        reportedUserId: viewerGroup.authorId,
+        reportedUserName: viewerGroup.authorName,
+        reporterId: currentUser.uid,
+        reporterName: userProfile.fullName,
+        reason: reportReason,
+        details: "Status content: " + (currentStory.text || (currentStory.mediaType === "image" ? "Photo status" : currentStory.mediaType === "video" ? "Video status" : "")),
+        status: "open",
+        createdAt: serverTimestamp(),
+      });
+      setReportDone(true);
+      setTimeout(() => { setShowReportStory(false); setReportDone(false); setReportReason(""); }, 1800);
+    } catch (e) {}
+    setReportSubmitting(false);
+  };
+
   return (
     <div>
       <div className="st-strip">
@@ -185,6 +233,11 @@ export default function Stories() {
               <div style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>{viewerGroup.authorName}</div>
               <div style={{ color: "rgba(255,255,255,.6)", fontSize: 11 }}>{timeAgo(viewerGroup.items[viewerIndex].createdAt)}</div>
             </div>
+            {viewerGroup.authorId === currentUser.uid ? (
+              <button className="st-viewer-close" style={{ marginLeft: "auto", fontSize: 14 }} onClick={loadViewersList} title="See who viewed">👁️</button>
+            ) : (
+              <button className="st-viewer-close" style={{ marginLeft: "auto", fontSize: 14 }} onClick={() => setShowReportStory(true)} title="Report">🚩</button>
+            )}
             <button className="st-viewer-close" onClick={() => setViewerGroup(null)}>✕</button>
           </div>
           <div className="st-viewer-body">
@@ -193,6 +246,61 @@ export default function Stories() {
             {viewerGroup.items[viewerIndex].mediaType === "image" && <img src={viewerGroup.items[viewerIndex].mediaUrl} alt="" />}
             {viewerGroup.items[viewerIndex].mediaType === "video" && <video src={viewerGroup.items[viewerIndex].mediaUrl} autoPlay muted playsInline />}
             {viewerGroup.items[viewerIndex].mediaType === "text" && <div className="st-viewer-text">{viewerGroup.items[viewerIndex].text}</div>}
+          </div>
+        </div>
+      )}
+
+      {showViewersList && (
+        <div className="st-create-modal" onClick={() => setShowViewersList(false)}>
+          <div className="st-create-card" onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>👁️ Viewed By</h3>
+            {loadingViewers && <p style={{ fontSize: 13, color: "var(--text2)" }}>Loading...</p>}
+            {!loadingViewers && viewersInfo.length === 0 && <p style={{ fontSize: 13, color: "var(--text2)" }}>No one has viewed this yet.</p>}
+            {!loadingViewers && viewersInfo.length > 0 && (
+              <div style={{ maxHeight: 280, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+                {viewersInfo.map(v => (
+                  <div key={v.uid} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Avatar src={v.photoURL} name={v.fullName} size={36} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{v.fullName}{v.verified && <span className="verified-badge" style={{ marginLeft: 5 }}>✓</span>}</div>
+                      <div style={{ fontSize: 11, color: "var(--text2)" }}>{v.nationality}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="btn-secondary" style={{ marginTop: 16 }} onClick={() => setShowViewersList(false)}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {showReportStory && (
+        <div className="st-create-modal" onClick={() => !reportSubmitting && setShowReportStory(false)}>
+          <div className="st-create-card" onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>🚩 Report this Status</h3>
+            {reportDone ? (
+              <div className="success-msg">✅ Report submitted. Our admin team will review it.</div>
+            ) : (
+              <>
+                <div className="form-group">
+                  <label className="form-label">Reason</label>
+                  <select className="form-input" value={reportReason} onChange={e => setReportReason(e.target.value)}>
+                    <option value="">Select a reason...</option>
+                    <option value="Inappropriate content">Inappropriate content</option>
+                    <option value="Harassment or bullying">Harassment or bullying</option>
+                    <option value="Scam or fraud attempt">Scam or fraud attempt</option>
+                    <option value="Spam">Spam</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btn-primary" style={{ margin: 0 }} onClick={submitStoryReport} disabled={!reportReason || reportSubmitting}>
+                    {reportSubmitting ? "Submitting..." : "Submit Report"}
+                  </button>
+                  <button className="btn-secondary" style={{ margin: 0 }} onClick={() => setShowReportStory(false)}>Cancel</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
