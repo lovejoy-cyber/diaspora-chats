@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, limit, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, limit, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -86,6 +86,11 @@ export default function Rooms() {
   const [search, setSearch] = useState("");
   const [activeRoom, setActiveRoom] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [bannedFromActiveRoom, setBannedFromActiveRoom] = useState(false);
+  const [showRoomMembers, setShowRoomMembers] = useState(false);
+  const [roomUserSearch, setRoomUserSearch] = useState("");
+  const [allUsersForBan, setAllUsersForBan] = useState([]);
+  const [roomBans, setRoomBans] = useState([]);
   const [text, setText] = useState("");
   const [customRooms, setCustomRooms] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -121,6 +126,21 @@ export default function Rooms() {
     return unsub;
   }, [activeRoom]);
 
+  // Checks whether the current user is banned from the room they're viewing, and (for
+  // moderators) loads the full ban list so it can be managed from the Members panel.
+  useEffect(() => {
+    if (!activeRoom || !currentUser) { setBannedFromActiveRoom(false); return; }
+    const banDoc = doc(db, "roomBans", activeRoom.id + "_" + currentUser.uid);
+    getDoc(banDoc).then(snap => setBannedFromActiveRoom(snap.exists())).catch(() => setBannedFromActiveRoom(false));
+    if (canModerateRoom(activeRoom)) {
+      const q = query(collection(db, "roomBans"), where("roomId", "==", activeRoom.id));
+      getDocs(q).then(snap => setRoomBans(snap.docs.map(d => d.data()))).catch(() => setRoomBans([]));
+    } else {
+      setRoomBans([]);
+    }
+    // eslint-disable-next-line
+  }, [activeRoom, currentUser]);
+
   // All country/city/public rooms are now open-join, no approval needed.
   // Only readonly (announcements/emergency) restrict posting to staff.
   const canPost = (room) => {
@@ -148,6 +168,7 @@ export default function Rooms() {
 
   const sendMessage = async () => {
     if(!text.trim()||!activeRoom||!canPost(activeRoom)) return;
+    if(bannedFromActiveRoom) return;
     const filtered = filterContent(text.trim());
     await addDoc(collection(db,"rooms",activeRoom.id,"messages"), {
       text:filtered,
@@ -156,9 +177,37 @@ export default function Rooms() {
       senderPhoto:userProfile.photoURL||"",
       senderRole:userProfile.role||"student",
       senderVerified:userProfile.verified||false,
+      pinned:false,
       createdAt:serverTimestamp(),
     });
     setText("");
+  };
+
+  // Room-level ban list — the actual "add/remove someone from the group" power a Governor
+  // needs, since preset country/city rooms don't have a fixed member list the way custom
+  // groups do. Banning blocks posting in that specific room only, checked live below.
+  const banFromRoom = async (roomId, targetUid, targetName) => {
+    if (!window.confirm("Remove " + targetName + " from this room? They will no longer be able to post here.")) return;
+    await setDoc(doc(db, "roomBans", roomId + "_" + targetUid), {
+      roomId, uid: targetUid, name: targetName,
+      bannedBy: currentUser.uid, bannedByName: userProfile.fullName,
+      createdAt: serverTimestamp(),
+    });
+  };
+  const unbanFromRoom = async (roomId, targetUid) => {
+    await deleteDoc(doc(db, "roomBans", roomId + "_" + targetUid));
+  };
+
+  const pinMessage = async (msgId, currentlyPinned) => {
+    if (!activeRoom) return;
+    await updateDoc(doc(db, "rooms", activeRoom.id, "messages", msgId), { pinned: !currentlyPinned });
+  };
+
+  const deleteRoomMessage = async (msgId) => {
+    if (!activeRoom) return;
+    if (window.confirm("Delete this message?")) {
+      await updateDoc(doc(db, "rooms", activeRoom.id, "messages", msgId), { deleted: true, text: "Message removed by moderator" });
+    }
   };
 
   const createRoom = async () => {
@@ -254,7 +303,26 @@ export default function Rooms() {
                 <h3 style={{fontSize:15,fontWeight:800}}>{activeRoom.name}</h3>
                 <p style={{fontSize:11,color:"var(--text2)"}}>{activeRoom.desc}</p>
               </div>
+              {canModerateRoom(activeRoom) && (
+                <button
+                  onClick={() => setShowRoomMembers(true)}
+                  style={{ marginLeft: "auto", background: "rgba(59,130,246,.12)", border: "1px solid rgba(59,130,246,.25)", color: "var(--primary-light)", padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  👥 Manage
+                </button>
+              )}
             </div>
+
+            {messages.some(m => m.pinned && !m.deleted) && (
+              <div style={{ padding: "8px 16px", background: "rgba(139,92,246,.08)", borderBottom: "1px solid var(--border)", fontSize: 12 }}>
+                {messages.filter(m => m.pinned && !m.deleted).map(m => (
+                  <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 0" }}>
+                    <span>📌 <strong>{m.senderName}:</strong> {m.text?.slice(0, 60)}</span>
+                    {canModerateRoom(activeRoom) && <button onClick={() => pinMessage(m.id, true)} style={{ background: "none", border: "none", color: "var(--text2)", cursor: "pointer", fontSize: 11 }}>Unpin</button>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="room-messages">
               {messages.length===0&&(
@@ -264,6 +332,7 @@ export default function Rooms() {
               )}
               {messages.map(msg=>{
                 const isMine = msg.senderId===currentUser.uid;
+                const canMod = canModerateRoom(activeRoom);
                 return (
                   <div key={msg.id} className={"room-msg"+(isMine?" mine":"")}>
                     <div className="room-msg-avatar" onClick={()=>navigate("/dashboard/user/"+msg.senderId)}>
@@ -278,8 +347,19 @@ export default function Rooms() {
                           {msg.senderRole==="governor"&&<span className="role-badge-governor">Governor</span>}
                         </div>
                       )}
-                      <div className={"room-msg-bubble"+(isMine?" mine":" theirs")}>{msg.text}</div>
-                      <div className="room-msg-time">{formatTime(msg.createdAt)}</div>
+                      <div className={"room-msg-bubble"+(isMine?" mine":" theirs")}>
+                        {msg.pinned && !msg.deleted && <div style={{ fontSize: 10, opacity: .75, marginBottom: 3 }}>📌 Pinned</div>}
+                        {msg.text}
+                      </div>
+                      <div className="room-msg-time" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {formatTime(msg.createdAt)}
+                        {canMod && !msg.deleted && (
+                          <>
+                            <button onClick={() => pinMessage(msg.id, msg.pinned)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 11 }}>{msg.pinned ? "Unpin" : "📌 Pin"}</button>
+                            <button onClick={() => deleteRoomMessage(msg.id)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 11 }}>🗑️</button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -288,7 +368,11 @@ export default function Rooms() {
             </div>
 
             <div className="room-input-area">
-              {!canPost(activeRoom) ? (
+              {bannedFromActiveRoom ? (
+                <div style={{ flex: 1, textAlign: "center", fontSize: 12, color: "var(--danger)", padding: "8px 0" }}>
+                  🚫 You have been removed from this room and cannot post here.
+                </div>
+              ) : !canPost(activeRoom) ? (
                 <div style={{flex:1,textAlign:"center",fontSize:12,color:"var(--text2)",padding:"8px 0"}}>
                   🔒 Read-only channel. Only embassy and admins can post here.
                 </div>
@@ -320,6 +404,64 @@ export default function Rooms() {
               <button className="btn-primary" onClick={createRoom} disabled={creating||!newRoom.name.trim()} style={{margin:0}}>{creating?"Creating...":"Create Group"}</button>
               <button className="btn-secondary" onClick={()=>setShowCreate(false)} style={{margin:0}}>Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showRoomMembers && activeRoom && (
+        <div className="modal-overlay" onClick={() => setShowRoomMembers(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3>👥 Manage {activeRoom.name}</h3>
+            <p style={{ fontSize: 12, color: "var(--text2)", marginBottom: 14, lineHeight: 1.6 }}>
+              As moderator you can remove someone from posting in this room, or pin important messages.
+              This does not affect their account elsewhere — only their access to this specific room.
+            </p>
+
+            <div className="form-group">
+              <label className="form-label">Currently Removed ({roomBans.length})</label>
+              {roomBans.length === 0 && <p style={{ fontSize: 12.5, color: "var(--text2)" }}>Nobody has been removed from this room.</p>}
+              {roomBans.map(b => (
+                <div key={b.uid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ fontSize: 13 }}>{b.name}</span>
+                  <button
+                    onClick={async () => { await unbanFromRoom(activeRoom.id, b.uid); setRoomBans(prev => prev.filter(x => x.uid !== b.uid)); }}
+                    style={{ background: "rgba(16,185,129,.12)", border: "1px solid rgba(16,185,129,.25)", color: "#34d399", padding: "5px 12px", borderRadius: 7, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    ✅ Restore Access
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Remove Someone</label>
+              <input
+                className="form-input"
+                placeholder="Search by name..."
+                value={roomUserSearch}
+                onChange={e => { setRoomUserSearch(e.target.value); if (allUsersForBan.length === 0) getDocs(collection(db, "users")).then(snap => setAllUsersForBan(snap.docs.map(d => d.data()))); }}
+              />
+              {roomUserSearch.trim() && (
+                <div style={{ maxHeight: 180, overflowY: "auto", marginTop: 8 }}>
+                  {allUsersForBan
+                    .filter(u => u.fullName?.toLowerCase().includes(roomUserSearch.toLowerCase()) && u.uid !== currentUser.uid && !roomBans.some(b => b.uid === u.uid))
+                    .slice(0, 8)
+                    .map(u => (
+                      <div key={u.uid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 0" }}>
+                        <span style={{ fontSize: 13 }}>{u.fullName}</span>
+                        <button
+                          onClick={async () => { await banFromRoom(activeRoom.id, u.uid, u.fullName); setRoomBans(prev => [...prev, { uid: u.uid, name: u.fullName }]); setRoomUserSearch(""); }}
+                          style={{ background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.2)", color: "#fca5a5", padding: "5px 12px", borderRadius: 7, fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                        >
+                          🚫 Remove
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <button className="btn-secondary" onClick={() => setShowRoomMembers(false)}>Close</button>
           </div>
         </div>
       )}

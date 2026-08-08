@@ -1,12 +1,15 @@
 // Time-limited privilege codes — the mechanism by which a normal student can be granted
-// a higher role (Regional Monitor, Secretary, etc.) without anyone ever just logging in
-// as admin directly. Flow: a Commander/Embassy/President generates a code for a specific
+// a higher role (Governor, Secretary, etc.) without anyone ever just logging in as admin
+// directly. Flow: the Commander (and ONLY the Commander) generates a code for a specific
 // target role and (optionally) a specific person; the recipient enters the code in their
 // own Profile; if valid and unexpired, their role updates automatically.
 //
-// This deliberately does NOT let someone request their own privileges — only an existing
-// authority above the target role can generate a code. That's the actual security model:
-// codes are issued top-down, never self-served.
+// IMPORTANT — role hierarchy correction: Embassy, President, Governor, Secretary,
+// Treasurer etc. are all badges/positions with specific delegated PERMISSIONS (like
+// moderating their own room or reviewing documents), but none of them can grant roles
+// to anyone else. Only the Commander (role === "admin") can ever issue a privilege code.
+// This was previously "anyone above the target role's level can issue," which was wrong —
+// a Governor should never be able to make someone else a Governor.
 
 import { collection, doc, addDoc, getDocs, query, where, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase/config";
@@ -23,13 +26,16 @@ function generateCode() {
   return code;
 }
 
-// Issues a new code. issuerLevel must be strictly higher than the target role's level —
-// nobody can grant a role equal to or above their own.
+// Issues a new code. Only the Commander (role === "admin") can issue codes, for any role
+// below Commander. This is a hard rule, not a level comparison — no other role, no matter
+// how high, can grant privileges to someone else.
 export async function issuePrivilegeCode({ issuerId, issuerName, issuerRole, targetRole, targetEmail, note, scopeCity }) {
-  const issuerLevel = ROLE_LEVELS[issuerRole] || 0;
+  if (issuerRole !== "admin") {
+    throw new Error("Only the Commander can issue privilege codes. Embassy, President, Governor and other roles are badges with specific permissions, not the ability to grant roles.");
+  }
   const targetLevel = ROLE_LEVELS[targetRole] || 0;
-  if (targetLevel >= issuerLevel) {
-    throw new Error("You cannot grant a role equal to or higher than your own.");
+  if (targetLevel >= ROLE_LEVELS["admin"]) {
+    throw new Error("You cannot issue a code for the Commander role.");
   }
   const code = generateCode();
   const expiresAt = new Date(Date.now() + CODE_VALID_HOURS * 60 * 60 * 1000);

@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import Feed from "./Feed";
 import Messages from "./Messages";
 import Market from "./Market";
+import Embassy from "./Embassy";
 import People from "./People";
 import Rooms from "./Rooms";
 import Profile from "./Profile";
@@ -34,6 +35,7 @@ const NAV = [
   {path:"messages",label:"Messages",icon:"💬"},
   {path:"rooms",label:"Rooms & Groups",icon:"🌍"},
   {path:"market",label:"Marketplace",icon:"🛍️"},
+  {path:"embassy",label:"Embassy",icon:"🏛️"},
   {path:"calls",label:"Calls",icon:"📞"},
   {path:"people",label:"People",icon:"👥"},
   {path:"profile",label:"My Profile",icon:"👤"},
@@ -133,6 +135,7 @@ export default function Dashboard() {
               </div>
               <div onClick={()=>{navigate("/dashboard/profile");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>👤 My Profile</div>
               <div onClick={()=>{navigate("/dashboard/rooms");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>🌍 Rooms & Groups</div>
+              <div onClick={()=>{navigate("/dashboard/embassy");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>🏛️ Embassy</div>
               <div onClick={()=>{navigate("/dashboard/people");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>👥 People</div>
               {isStaff && (
                 <div onClick={()=>{navigate("/dashboard/admin");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>🛡️ Admin Panel</div>
@@ -149,6 +152,7 @@ export default function Dashboard() {
           <Route index element={<Feed />} />
           <Route path="messages" element={<Messages />} />
           <Route path="market" element={<Market />} />
+          <Route path="embassy" element={<Embassy />} />
           <Route path="rooms" element={<Rooms />} />
           <Route path="people" element={<People />} />
           <Route path="calls" element={<Calls />} />

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, addDoc, collection, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
+import TrustedBadge from "../components/TrustedBadge";
 
 const STYLE = `
 .vp-page{max-width:560px;margin:0 auto;padding:20px 14px;overflow-y:auto;height:calc(100vh - 57px);}
@@ -165,6 +166,7 @@ export default function ViewProfile() {
             {profile.fullName}
             {profile.verified && <span className="verified-badge">✓ Verified</span>}
             {getRoleBadge()}
+            <TrustedBadge show={profile.trustedSender} />
           </div>
           <div className="vp-meta">
             🌍 {profile.nationality} · 🏫 {profile.university}<br />

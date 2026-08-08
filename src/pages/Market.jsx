@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { uploadToCloudinary, cleanText, containsProfanity, timeAgo } from "../lib/helpers";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
+import TrustedBadge from "../components/TrustedBadge";
 import UserProfileModal from "../components/UserProfileModal";
 import Lightbox from "../components/Lightbox";
 
@@ -147,6 +148,7 @@ export default function Market() {
         uid: currentUser.uid, posterName: userProfile.fullName,
         posterPhoto: userProfile.photoURL || "", posterRole: userProfile.role || "student",
         posterNationality: userProfile.nationality || "", posterVerified: userProfile.verified || false,
+        posterTrustedSender: userProfile.trustedSender || false,
         status: "open", createdAt: serverTimestamp(),
       });
       // Money transfer listings are the trust-critical core of this app, so they trigger
@@ -278,6 +280,7 @@ export default function Market() {
                       {l.posterName}{l.posterVerified && <span className="verified-badge">✓</span>}
                     </div>
                     <RoleBadge role={l.posterRole} small />
+                    <TrustedBadge show={l.posterTrustedSender} small />
                   </div>
                   <span className="mk-po-t">{timeAgo(l.createdAt)}</span>
                 </div>

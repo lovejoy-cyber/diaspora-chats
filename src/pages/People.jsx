@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { isUserOnline } from "../lib/helpers";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
+import TrustedBadge from "../components/TrustedBadge";
 
 const CSS = `
 .ppl-page{padding:12px 14px;overflow-y:auto;height:100%;max-width:640px;margin:0 auto}
@@ -89,6 +90,7 @@ export default function People() {
               {u.fullName}
               {u.verified && <span className="verified-badge">✓</span>}
               <RoleBadge role={u.role} small />
+              <TrustedBadge show={u.trustedSender} small />
             </div>
             <div className="ppl-meta">🌍 {u.nationality} · 🏫 {u.university}</div>
           </div>

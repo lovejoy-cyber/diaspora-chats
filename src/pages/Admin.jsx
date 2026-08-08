@@ -97,6 +97,20 @@ export default function Admin() {
   const unverify = async u => { await updateDoc(doc(db, "users", u.uid), { verified: false }); };
   const suspend = async u => { if (window.confirm("Suspend " + u.fullName + "?")) await updateDoc(doc(db, "users", u.uid), { suspended: true, suspendedAt: serverTimestamp() }); };
   const restore = async u => { await updateDoc(doc(db, "users", u.uid), { suspended: false }); };
+
+  // Trusted Sender is a manual, admin-only badge — distinct from role badges (Governor,
+  // Embassy etc). It marks someone specifically vetted for money-transfer trustworthiness,
+  // tying directly back to the app's original purpose. Manual for now; an automatic
+  // version based on completed-transfer ratings is a real future upgrade once that
+  // transaction-history system actually exists and has real data feeding it.
+  const toggleTrustedSender = async u => {
+    const next = !u.trustedSender;
+    await updateDoc(doc(db, "users", u.uid), { trustedSender: next, trustedSenderBy: next ? currentUser.uid : null, trustedSenderAt: next ? serverTimestamp() : null });
+    if (next) {
+      await addDoc(collection(db, "notifications"), { recipientId: u.uid, icon: "💎", title: "Trusted Sender badge granted", message: "You've been marked as a Trusted Sender by the embassy. This badge appears on your profile and listings.", link: "/dashboard/profile", read: false, createdAt: serverTimestamp() }).catch(() => {});
+    }
+  };
+
   const setRole = async (u, role) => {
     if (!isAdmin) return alert("Only administrators can change roles.");
     await updateDoc(doc(db, "users", u.uid), { role });
@@ -133,7 +147,12 @@ export default function Admin() {
   };
 
   // Roles this admin is actually allowed to issue codes for — strictly below their own level.
-  const issuableRoles = Object.keys(ROLE_LEVELS).filter(r => ROLE_LEVELS[r] < (level ?? 0) && r !== "student");
+  // Only the Commander (role === "admin") can issue privilege codes — this is a hard rule,
+  // not a level comparison. Embassy, President, Governor etc. are permission badges, not
+  // the ability to grant roles to others.
+  const issuableRoles = userProfile?.role === "admin"
+    ? Object.keys(ROLE_LEVELS).filter(r => r !== "admin" && r !== "student")
+    : [];
 
   const resolveReport = async r => { await updateDoc(doc(db, "reports", r.id), { status: "resolved", resolvedBy: currentUser.uid }); };
   const removeListing = async id => { if (window.confirm("Remove this listing?")) await updateDoc(doc(db, "listings", id), { status: "closed" }); };
@@ -300,6 +319,7 @@ export default function Admin() {
                 )}
                 {!u.verified && !u.suspended && <button className="ad-b ok" onClick={() => verify(u)}>✓ Verify</button>}
                 {u.verified && <button className="ad-b warn" onClick={() => unverify(u)}>↩ Unverify</button>}
+                {isStaff && <button className={"ad-b " + (u.trustedSender ? "warn" : "info")} onClick={() => toggleTrustedSender(u)}>{u.trustedSender ? "💎 Remove Trusted" : "💎 Mark Trusted Sender"}</button>}
                 {!u.suspended && u.uid !== currentUser.uid && <button className="ad-b bad" onClick={() => suspend(u)}>⊘ Suspend</button>}
                 {u.suspended && <button className="ad-b info" onClick={() => restore(u)}>↩ Restore</button>}
               </div>
@@ -418,12 +438,16 @@ export default function Admin() {
           <div className="card">
             <div className="card-title">🔑 Issue a Privilege Code</div>
             <p style={{ fontSize: 12.5, color: "var(--text2)", marginBottom: 14, lineHeight: 1.6 }}>
-              You can only issue codes for roles below your own ({ROLE_INFO[userProfile?.role]?.label || userProfile?.role}).
-              The code expires in 24 hours and can only be used once. The recipient enters it themselves in their Profile —
-              nobody's role changes until they do that.
+              Only the Commander can grant roles. Embassy, President, Governor, Secretary, and Treasurer are
+              permission badges with specific responsibilities (moderating a room, reviewing documents) —
+              none of them can grant roles to anyone else. The code expires in 24 hours and can only be used
+              once. The recipient enters it themselves in their Profile — nobody's role changes until they do that.
             </p>
             {issuableRoles.length === 0 ? (
-              <p style={{ fontSize: 13, color: "var(--text2)" }}>Your current role cannot issue privilege codes.</p>
+              <>
+                <p style={{ fontSize: 13, color: "var(--text2)" }}>Only the Commander can issue privilege codes. If you need someone granted a role, contact the Commander directly.</p>
+                <p style={{ fontSize: 12.5, color: "var(--text3)", marginTop: 8 }}>Your role gives you permissions within your own scope — see the Group Management section below for what you can do.</p>
+              </>
             ) : (
               <form onSubmit={issueCode}>
                 {pcError && <div className="error-msg">⚠️ {pcError}</div>}
