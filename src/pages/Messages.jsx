@@ -481,6 +481,30 @@ export default function Messages() {
   };
 
   const handleKey = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
+
+  // Swipe-to-reply — tracks a touch drag on a message bubble; swiping far enough right
+  // (for their messages) or left (for yours) triggers Reply, same gesture as WhatsApp.
+  const swipeStateRef = useRef({});
+  const [swipeOffset, setSwipeOffset] = useState({});
+  const SWIPE_THRESHOLD = 60;
+
+  const onTouchStart = (msgId, e) => {
+    swipeStateRef.current[msgId] = { startX: e.touches[0].clientX, active: true };
+  };
+  const onTouchMove = (msgId, isMine, e) => {
+    const s = swipeStateRef.current[msgId];
+    if (!s?.active) return;
+    const dx = e.touches[0].clientX - s.startX;
+    const clamped = isMine ? Math.min(0, Math.max(dx, -80)) : Math.max(0, Math.min(dx, 80));
+    setSwipeOffset(prev => ({ ...prev, [msgId]: clamped }));
+  };
+  const onTouchEnd = (msgId, msg) => {
+    const offset = swipeOffset[msgId] || 0;
+    if (Math.abs(offset) > SWIPE_THRESHOLD) setReplyTo(msg);
+    setSwipeOffset(prev => ({ ...prev, [msgId]: 0 }));
+    if (swipeStateRef.current[msgId]) swipeStateRef.current[msgId].active = false;
+  };
+
   const online = isUserOnline(otherProfile);
   const groupedMsgs = useMemo(() => groupMessages(messages), [messages]);
   const displayMsgs = useMemo(() => {
@@ -555,7 +579,7 @@ export default function Messages() {
                 <Avatar src={getOPhoto(active)} name={getOName(active)} size={38} />
               </div>
               <div className="ms-hi" onClick={() => navigate("/dashboard/user/" + getOid(active))} style={{ display: "flex", flexDirection: "column" }}>
-                <h4>{getOName(active)}{otherProfile?.verified && <span className="verified-badge">✓</span>}</h4>
+                <h4>{getOName(active)}{otherProfile?.verified && <span className="verified-badge">✓</span>}<RoleBadge role={otherProfile?.role} small /></h4>
                 <span className={online ? "on" : ""}>{online ? "🟢 Online" : otherProfile ? lastSeenText(otherProfile) : ""}</span>
               </div>
               <div className="ms-hactions">
@@ -598,7 +622,16 @@ export default function Messages() {
                 return (
                   <div key={msg.id}>
                     {showDate && msg.createdAt && <div className="ms-day"><span>{msg.createdAt.toDate().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</span></div>}
-                    <div className={"ms-row" + (isMine ? " mine" : "") + (msg.isFirstInGroup ? " grouped-first" : " grouped")}>
+                    <div
+                      className={"ms-row" + (isMine ? " mine" : "") + (msg.isFirstInGroup ? " grouped-first" : " grouped")}
+                      style={{ transform: "translateX(" + (swipeOffset[msg.id] || 0) + "px)", transition: swipeOffset[msg.id] ? "none" : "transform .2s", position: "relative" }}
+                      onTouchStart={e => onTouchStart(msg.id, e)}
+                      onTouchMove={e => onTouchMove(msg.id, isMine, e)}
+                      onTouchEnd={() => onTouchEnd(msg.id, msg)}
+                    >
+                      {Math.abs(swipeOffset[msg.id] || 0) > 15 && (
+                        <span style={{ position: "absolute", top: "50%", [isMine ? "left" : "right"]: -28, transform: "translateY(-50%)", fontSize: 16, opacity: Math.min(1, Math.abs(swipeOffset[msg.id] || 0) / SWIPE_THRESHOLD) }}>↩</span>
+                      )}
                       <div className="ms-avatar-slot">
                         {!isMine && msg.isLastInGroup && <Avatar src={msg.senderPhoto} name={msg.senderName} size={26} />}
                       </div>

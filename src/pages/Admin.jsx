@@ -214,6 +214,28 @@ export default function Admin() {
   const topCountries = Object.entries(byCountry).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const maxC = Math.max(1, ...topCountries.map(c => c[1]));
 
+  // Growth graph — signups per week over the last 8 weeks, computed directly from real
+  // user.createdAt timestamps already in the users collection (no new data, no chart
+  // library — same simple bar-chart pattern as the country breakdown above).
+  const weeklySignups = (() => {
+    const weeks = [];
+    const now = new Date();
+    for (let i = 7; i >= 0; i--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - i * 7 - now.getDay());
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 7);
+      const count = users.filter(u => {
+        const created = u.createdAt?.toDate?.();
+        return created && created >= weekStart && created < weekEnd;
+      }).length;
+      weeks.push({ label: (weekStart.getMonth() + 1) + "/" + weekStart.getDate(), count });
+    }
+    return weeks;
+  })();
+  const maxWeekly = Math.max(1, ...weeklySignups.map(w => w.count));
+
   const shown = users.filter(u => {
     const q = search.toLowerCase();
     const m = !q || u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.nationality?.toLowerCase().includes(q) || u.city?.toLowerCase().includes(q);
@@ -248,6 +270,19 @@ export default function Admin() {
             <div className="stat-card"><div className="stat-number">{onlineNow}</div><div className="stat-label">Online Now</div></div>
             <div className="stat-card"><div className="stat-number">{openReports}</div><div className="stat-label">Open Reports</div></div>
             <div className="stat-card"><div className="stat-number">{listings.filter(l => l.status === "open").length}</div><div className="stat-label">Listings</div></div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">📈 Signups — Last 8 Weeks</div>
+            <div className="ad-bars">
+              {weeklySignups.map(w => (
+                <div key={w.label} className="ad-bar">
+                  <div className="ad-bar-v">{w.count}</div>
+                  <div className="ad-bar-f" style={{ height: Math.max(4, (w.count / maxWeekly) * 90) + "px" }} />
+                  <div className="ad-bar-l">{w.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="card">

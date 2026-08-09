@@ -8,6 +8,7 @@ import { uploadToCloudinary } from "../lib/helpers";
 import { redeemPrivilegeCode } from "../lib/privilegeCodes";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
+import ProfileQR from "../components/ProfileQR";
 
 const NATIONALITIES = ["Zimbabwean","Nigerian","Cameroonian","Congolese (DRC)","Congolese (ROC)","Ivorian","Senegalese","Malian","Burkinabe","Guinean","Ghanaian","Kenyan","Ethiopian","South African","Mozambican","Zambian","Tanzanian","Ugandan","Rwandan","Togolese","Beninese","Nigerien","Chadian","Sudanese","Libyan","Moroccan","Tunisian","Mauritanian","Algerian","Namibian","Botswanan","Angolan","Sierra Leonean","Liberian","Gambian","Malawian","Egyptian","Somali","Eritrean","Gabonese","Other"];
 const UNIVERSITIES = ["USTO-MB (Oran)","Université d'Oran 1","Université d'Oran 2","ENPO (Oran)","Université de Mostaganem","Université d'Alger 1","Université d'Alger 2","Université d'Alger 3","USTHB (Alger)","Université de Constantine 1","Université de Constantine 2","Université de Constantine 3","Université de Annaba","Université de Sétif","Université de Tlemcen","Université de Béjaïa","Université de Tizi Ouzou","Université de Blida","Université de Batna","Other"];
@@ -196,9 +197,12 @@ export default function Profile() {
             </div>
           </div>
           {!editing && (
-            <button onClick={startEdit} style={{ padding: "9px 18px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
-              ✏️ Edit Profile
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button onClick={startEdit} style={{ padding: "9px 18px", background: "var(--primary)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+                ✏️ Edit Profile
+              </button>
+              <ProfileQR uid={currentUser.uid} name={userProfile?.fullName} />
+            </div>
           )}
         </div>
         {!editing && userProfile?.bio && (

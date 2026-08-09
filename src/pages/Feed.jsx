@@ -8,6 +8,7 @@ import RoleBadge from "../components/RoleBadge";
 import UserProfileModal from "../components/UserProfileModal";
 import Lightbox from "../components/Lightbox";
 import Stories from "../components/Stories";
+import DailyCheckIn from "../components/DailyCheckIn";
 
 const EMOJIS = ["❤️","😂","😮","😢","🔥","👏","🙏","💯"];
 
@@ -138,6 +139,14 @@ export default function Feed() {
     await updateDoc(doc(db, "posts", p.id), { likes: has ? arrayRemove(currentUser.uid) : arrayUnion(currentUser.uid) });
   };
 
+  // Saved posts — a private bookmark, same pattern as likes (an array of uids on the post
+  // doc) but never shown publicly like a like-count would be; only the person who saved it
+  // can see their own saved list.
+  const toggleSave = async (p) => {
+    const has = p.savedBy?.includes(currentUser.uid);
+    await updateDoc(doc(db, "posts", p.id), { savedBy: has ? arrayRemove(currentUser.uid) : arrayUnion(currentUser.uid) });
+  };
+
   const react = async (pid, emoji) => {
     const p = posts.find(x => x.id === pid); if (!p) return;
     const cur = p.reactions?.[emoji] || [];
@@ -177,12 +186,14 @@ export default function Feed() {
     if (blocked.includes(p.authorId)) return false;
     if (tab === "following") return userProfile?.following?.includes(p.authorId) || p.authorId === currentUser.uid;
     if (tab === "official") return ["embassy", "admin", "superadmin", "governor", "president"].includes(p.authorRole);
+    if (tab === "saved") return p.savedBy?.includes(currentUser.uid);
     return true;
   });
 
   return (
     <div className="fd">
       <Stories />
+      <DailyCheckIn />
       <div className="fd-comp">
         <div className="fd-comp-top">
           <Avatar src={userProfile?.photoURL} name={userProfile?.fullName} size={38} />
@@ -220,7 +231,7 @@ export default function Feed() {
       </div>
 
       <div className="fd-tabs">
-        {[{ k: "all", l: "🌍 Everyone" }, { k: "following", l: "👥 Following" }, { k: "official", l: "🏛️ Official" }].map(t => (
+        {[{ k: "all", l: "🌍 Everyone" }, { k: "following", l: "👥 Following" }, { k: "official", l: "🏛️ Official" }, { k: "saved", l: "🔖 Saved" }].map(t => (
           <button key={t.k} className={"fd-tab" + (tab === t.k ? " active" : "")} onClick={() => setTab(t.k)}>{t.l}</button>
         ))}
       </div>
@@ -291,6 +302,9 @@ export default function Feed() {
             </button>
             <button className="fd-abtn" onClick={() => setPick(pick === p.id ? null : p.id)}>😊 React</button>
             <button className="fd-abtn" onClick={() => toggleComments(p.id)}>💬 {p.commentCount || 0}</button>
+            <button className={"fd-abtn" + (p.savedBy?.includes(currentUser.uid) ? " liked" : "")} onClick={() => toggleSave(p)} title={p.savedBy?.includes(currentUser.uid) ? "Unsave" : "Save"}>
+              {p.savedBy?.includes(currentUser.uid) ? "🔖" : "🏷️"}
+            </button>
           </div>
 
           {openC[p.id] && (

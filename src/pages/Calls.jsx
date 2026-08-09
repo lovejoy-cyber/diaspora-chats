@@ -39,6 +39,7 @@ const CSS = `
 .cl-ab.tog{background:var(--bg-input);border:1px solid var(--border)}
 .cl-ab.tog:hover{background:rgba(255,255,255,.1)}
 .cl-vid{width:100%;max-width:420px;aspect-ratio:3/4;max-height:46vh;background:#000;border-radius:16px;overflow:hidden;position:relative}
+.cl-vid-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%;max-width:460px;max-height:60vh}
 .cl-vid-lbl{position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:3px 9px;border-radius:20px}
 .cl-vid-me{position:absolute;bottom:8px;right:8px;width:92px;aspect-ratio:3/4;background:#111;border-radius:10px;overflow:hidden;border:2px solid var(--primary)}
 .cl-ring{animation:clRing .9s ease-in-out infinite}
@@ -93,15 +94,22 @@ export default function Calls() {
     };
   }, []);
   const timerRef = useRef(null);
-  const remoteRef = useRef(null);
+  // (remoteRefs declared below, next to remoteUsers state)
   const localRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [callError, setCallError] = useState("");
   const [localCamTrack, setLocalCamTrack] = useState(null);
-  const [remoteVideoTrack, setRemoteVideoTrack] = useState(null);
+  // Remote participants tracked as a Map keyed by their UID — NOT single state values.
+  // This was the actual bug: with useState(null) for a single remote track, every new
+  // "user-published" event overwrote whoever published before them, so in a 3-person call
+  // (or even 2 people joining close together) only the LAST person to publish was ever
+  // visible/audible — explaining "one person speaks, others only hear" and "video box
+  // empty for others." A Map lets every participant's audio/video track persist independently.
+  const [remoteUsers, setRemoteUsers] = useState(new Map());
   const [activeCallId, setActiveCallId] = useState(null);
   const [recentCalls, setRecentCalls] = useState([]);
   const [limitError, setLimitError] = useState("");
+  const remoteRefs = useRef({}); // uid -> DOM node, one per remote participant
 
   // Plays the local camera preview the moment the video box actually exists in the DOM —
   // fixes the black-screen bug, which was caused by a fixed setTimeout racing against a
@@ -112,11 +120,16 @@ export default function Calls() {
     }
   }, [localCamTrack, state]);
 
+  // Plays each remote participant's video into THEIR OWN dom node, keyed by uid, the
+  // moment both the track and that node exist — same fix pattern as the local preview,
+  // but now correctly handles more than one remote person at once.
   useEffect(() => {
-    if (remoteVideoTrack && remoteRef.current) {
-      remoteVideoTrack.play(remoteRef.current);
-    }
-  }, [remoteVideoTrack, state]);
+    remoteUsers.forEach((info, uid) => {
+      if (info.videoTrack && remoteRefs.current[uid]) {
+        info.videoTrack.play(remoteRefs.current[uid]);
+      }
+    });
+  }, [remoteUsers, state]);
 
   // Auto-start a call if we arrived here from a chat header (?call=uid&type=voice)
   useEffect(() => {
@@ -215,10 +228,41 @@ export default function Calls() {
       tracksRef.current = tracks;
       client.on("user-published", async (user, media) => {
         await client.subscribe(user, media);
-        if (media === "audio") { user.audioTrack.play(); setState("in-call"); }
-        if (media === "video") { setState("in-call"); setRemoteVideoTrack(user.videoTrack); }
+        setState("in-call");
+        setRemoteUsers(prev => {
+          const next = new Map(prev);
+          const existing = next.get(user.uid) || {};
+          if (media === "audio") {
+            user.audioTrack.play();
+            next.set(user.uid, { ...existing, audioTrack: user.audioTrack });
+          }
+          if (media === "video") {
+            next.set(user.uid, { ...existing, videoTrack: user.videoTrack });
+          }
+          return next;
+        });
       });
-      client.on("user-left", () => { if (client.remoteUsers.length === 0) end(); });
+      client.on("user-unpublished", (user, media) => {
+        setRemoteUsers(prev => {
+          const next = new Map(prev);
+          const existing = next.get(user.uid);
+          if (existing) {
+            const updated = { ...existing };
+            if (media === "audio") updated.audioTrack = null;
+            if (media === "video") updated.videoTrack = null;
+            next.set(user.uid, updated);
+          }
+          return next;
+        });
+      });
+      client.on("user-left", (user) => {
+        setRemoteUsers(prev => {
+          const next = new Map(prev);
+          next.delete(user.uid);
+          return next;
+        });
+        if (client.remoteUsers.length === 0) end();
+      });
       setTimeout(() => setState(s => s === "calling" ? "in-call" : s), 4000);
     } catch (e) {
       console.error("Call error:", e);
@@ -289,7 +333,7 @@ export default function Calls() {
     }
     clientRef.current = null; tracksRef.current = [];
     setState("idle"); setTarget(null); setMuted(false); setCamOff(false); setGroup(false);
-    setLocalCamTrack(null); setRemoteVideoTrack(null); setActiveCallId(null);
+    setLocalCamTrack(null); setRemoteUsers(new Map()); setActiveCallId(null);
   };
 
   const toggleMute = () => {
@@ -384,11 +428,29 @@ export default function Calls() {
       {state !== "idle" && target && (
         <div className="cl-modal">
           {type === "video" && (state === "in-call" || (state === "calling" && localCamTrack)) && (
-            <div className="cl-vid">
-              <div ref={remoteRef} style={{ width: "100%", height: "100%" }} />
-              <span className="cl-vid-lbl">{target.fullName}</span>
-              <div className="cl-vid-me"><div ref={localRef} style={{ width: "100%", height: "100%" }} /></div>
-            </div>
+            remoteUsers.size <= 1 ? (
+              // Common case: 1-on-1 video call — single big remote box + small self-preview,
+              // same layout as before.
+              <div className="cl-vid">
+                <div ref={el => { const uid = [...remoteUsers.keys()][0]; if (uid) remoteRefs.current[uid] = el; }} style={{ width: "100%", height: "100%" }} />
+                <span className="cl-vid-lbl">{target.fullName}</span>
+                <div className="cl-vid-me"><div ref={localRef} style={{ width: "100%", height: "100%" }} /></div>
+              </div>
+            ) : (
+              // Group call with multiple remote participants — each gets their own box in
+              // a grid, keyed by their real uid so tracks never overwrite each other.
+              <div className="cl-vid-grid">
+                {[...remoteUsers.entries()].map(([uid]) => (
+                  <div key={uid} className="cl-vid" style={{ maxWidth: "none" }}>
+                    <div ref={el => { remoteRefs.current[uid] = el; }} style={{ width: "100%", height: "100%" }} />
+                  </div>
+                ))}
+                <div className="cl-vid" style={{ maxWidth: "none" }}>
+                  <div ref={localRef} style={{ width: "100%", height: "100%" }} />
+                  <span className="cl-vid-lbl">You</span>
+                </div>
+              </div>
+            )
           )}
           <div className={"cl-box" + (state === "calling" ? " cl-ring" : "")}>
             <Avatar src={target.photoURL} name={target.fullName} size={78} ring />
