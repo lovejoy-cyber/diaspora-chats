@@ -60,11 +60,14 @@ export default function Login() {
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <div className="aurora-bg">
+        <div className="aurora-blob b1" /><div className="aurora-blob b2" /><div className="aurora-blob b3" />
+      </div>
+      <div className="auth-card" style={{ position: "relative", zIndex: 1 }}>
         <div className="auth-logo">
           <span className="auth-logo-icon">🌍</span>
           <h1>DiasporaLink</h1>
-          <p>Global Student Community Platform</p>
+          <p>Global Community Platform</p>
         </div>
         <h2 className="auth-title">Welcome back</h2>
         <p className="auth-subtitle">Sign in to your account</p>

@@ -129,7 +129,10 @@ export default function Register() {
 
   return (
     <div className="auth-page">
-      <div className="auth-card" style={{maxWidth:480}}>
+      <div className="aurora-bg">
+        <div className="aurora-blob b1" /><div className="aurora-blob b2" /><div className="aurora-blob b3" />
+      </div>
+      <div className="auth-card" style={{maxWidth:480, position: "relative", zIndex: 1}}>
         <div className="auth-logo">
           <span className="auth-logo-icon">🌍</span>
           <h1>DiasporaLink</h1>
