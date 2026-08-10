@@ -7,12 +7,14 @@ import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
 
 // This is a SEPARATE system from the public "Announcements" room and from regular DMs —
-// it's specifically the private, one-on-one channel between each individual student and
-// Embassy for official business: submitting documents, transcripts, IDs, complaints,
-// questions, and Embassy sending official notices/documents back down to a specific person.
+// it's the private, one-on-one channel between each individual community member and
+// Embassy for official business: submitting documents, IDs, complaints, questions, and
+// Embassy sending official notices/documents back down to a specific person. Available
+// to every member regardless of whether they're a student, graduate, or professional —
+// not gated by occupation.
 //
-// Access model: a regular student only ever sees their OWN thread with Embassy. Anyone
-// with role "embassy" or "admin" sees a list of every student's thread and can open any
+// Access model: a regular member only ever sees their OWN thread with Embassy. Anyone
+// with role "embassy" or "admin" sees a list of every member's thread and can open any
 // of them — this is the "database of each person's submitted documents" you asked for.
 
 const CSS = `
@@ -144,10 +146,10 @@ export default function Embassy() {
       {isEmbassyStaff && (
         <div className={"em-side" + (showSidebar ? "" : "")}>
           <div className="em-side-h">
-            <h3>🏛️ Student Threads</h3>
-            <p>Every student's private channel with Embassy</p>
+            <h3>🏛️ Member Threads</h3>
+            <p>Every member's private channel with Embassy</p>
           </div>
-          <input className="em-search" placeholder="🔍 Search students..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="em-search" placeholder="🔍 Search members..." value={search} onChange={e => setSearch(e.target.value)} />
           <div className="em-list">
             {threads.filter(t => t.studentName?.toLowerCase().includes(search.toLowerCase())).map(t => (
               <div key={t.id} className={"em-row" + (selectedUid === t.studentId ? " active" : "")} onClick={() => { setSelectedUid(t.studentId); setSelectedName(t.studentName); }}>
@@ -159,7 +161,7 @@ export default function Embassy() {
                 {t["unread_embassy"] && <span className="em-badge-count">●</span>}
               </div>
             ))}
-            {threads.length === 0 && <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--text2)" }}>No student threads yet.</div>}
+            {threads.length === 0 && <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--text2)" }}>No member threads yet.</div>}
           </div>
         </div>
       )}
@@ -169,7 +171,7 @@ export default function Embassy() {
           <div className="em-empty">
             <div style={{ fontSize: 42 }}>🏛️</div>
             <div style={{ fontWeight: 700, fontSize: 15 }}>Embassy Portal</div>
-            <div style={{ fontSize: 13 }}>Select a student thread to view their documents and messages.</div>
+            <div style={{ fontSize: 13 }}>Select a member thread to view their documents and messages.</div>
           </div>
         ) : (
           <>
