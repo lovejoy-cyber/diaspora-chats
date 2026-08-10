@@ -105,7 +105,7 @@ export default function DailyCheckIn() {
   if (!prompt && !canPost) return null; // nothing to show a regular student if no prompt exists today
 
   return (
-    <div className="dc-card">
+    <div className="dc-card glow-border">
       <div className="dc-head">
         <span style={{ fontSize: 18 }}>💭</span>
         <h4>Daily Check-In</h4>

@@ -5,15 +5,28 @@ import { doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc
 import { auth, db } from "../firebase/config";
 import { COUNTRY_ROOMS } from "../lib/rooms";
 import { getOrCreatePersistentDeviceId } from "../lib/deviceFingerprint";
+import ReactiveAvatar from "../components/ReactiveAvatar";
 
 const NATIONALITIES = COUNTRY_ROOMS.map(r => r.country).concat(["Algerian","Other"]);
 const UNIVERSITIES = ["USTO-MB (Oran)","Université d'Oran 1","Université d'Oran 2","ENPO (Oran)","Université de Mostaganem","Université d'Alger 1","Université d'Alger 2","Université d'Alger 3","USTHB (Alger)","Université de Constantine 1","Université de Constantine 2","Université de Constantine 3","Université de Annaba","Université de Sétif","Université de Tlemcen","Université de Béjaïa","Université de Tizi Ouzou","Université de Blida","Université de Batna","Other"];
 const CITIES = ["Oran","Alger","Constantine","Annaba","Sétif","Tlemcen","Béjaïa","Tizi Ouzou","Blida","Batna","Mostaganem","Other"];
 const GENDERS = [{value:"male",icon:"👨",label:"Male"},{value:"female",icon:"👩",label:"Female"},{value:"other",icon:"🧑",label:"Other"},{value:"prefer_not",icon:"🔒",label:"Private"}];
 
+// This app is for the whole diaspora community, not just students — post-graduates,
+// working professionals, developers etc. Forcing everyone through a "select your
+// university" field made no sense for anyone outside student life. University is now
+// only asked (and only required) if someone actually identifies as a current student.
+const OCCUPATIONS = [
+  {value:"student",icon:"🎓",label:"Student"},
+  {value:"graduate",icon:"📜",label:"Graduate"},
+  {value:"professional",icon:"💼",label:"Working Professional"},
+  {value:"other",icon:"🌍",label:"Other"},
+];
+
 export default function Register() {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({fullName:"",email:"",password:"",confirmPassword:"",nationality:"",university:"",city:"",gender:""});
+  const [focusedField, setFocusedField] = useState("none");
+  const [form, setForm] = useState({fullName:"",email:"",password:"",confirmPassword:"",nationality:"",university:"",occupation:"",city:"",gender:""});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -25,11 +38,12 @@ export default function Register() {
     if(form.password.length<6) return "Password must be at least 6 characters.";
     if(form.password!==form.confirmPassword) return "Passwords do not match.";
     if(!form.gender) return "Please select your gender.";
+    if(!form.occupation) return "Please select what best describes you.";
     return null;
   };
   const validateStep2 = () => {
     if(!form.nationality) return "Please select your nationality.";
-    if(!form.university) return "Please select your university.";
+    if(form.occupation === "student" && !form.university) return "Please select your university.";
     if(!form.city) return "Please select your city.";
     return null;
   };
@@ -64,6 +78,7 @@ export default function Register() {
         email:form.email.toLowerCase().trim(),
         nationality:form.nationality,
         university:form.university,
+        occupation:form.occupation,
         city:form.city,
         gender:form.gender,
         photoURL:"",
@@ -129,23 +144,33 @@ export default function Register() {
 
         {step===1 && (
           <div>
+            <ReactiveAvatar focusedField={focusedField} />
             <div className="form-group"><label className="form-label">Full Name</label>
-              <input name="fullName" type="text" className="form-input" placeholder="As on your passport / ID" value={form.fullName} onChange={handleChange} />
+              <input name="fullName" type="text" className="form-input" placeholder="As on your passport / ID" value={form.fullName} onChange={handleChange} onFocus={() => setFocusedField("name")} onBlur={() => setFocusedField("none")} />
             </div>
             <div className="form-group"><label className="form-label">Email Address</label>
-              <input name="email" type="email" className="form-input" placeholder="your@email.com" value={form.email} onChange={handleChange} />
+              <input name="email" type="email" className="form-input" placeholder="your@email.com" value={form.email} onChange={handleChange} onFocus={() => setFocusedField("email")} onBlur={() => setFocusedField("none")} />
             </div>
             <div className="form-row">
               <div className="form-group"><label className="form-label">Password</label>
-                <input name="password" type="password" className="form-input" placeholder="Min 6 characters" value={form.password} onChange={handleChange} /></div>
+                <input name="password" type="password" className="form-input" placeholder="Min 6 characters" value={form.password} onChange={handleChange} onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField("none")} /></div>
               <div className="form-group"><label className="form-label">Confirm Password</label>
-                <input name="confirmPassword" type="password" className="form-input" placeholder="Repeat" value={form.confirmPassword} onChange={handleChange} /></div>
+                <input name="confirmPassword" type="password" className="form-input" placeholder="Repeat" value={form.confirmPassword} onChange={handleChange} onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField("none")} /></div>
             </div>
             <div className="form-group"><label className="form-label">Gender</label>
               <div className="gender-select">
                 {GENDERS.map(g=>(
                   <div key={g.value} className={"gender-option"+(form.gender===g.value?" selected":"")} onClick={()=>setForm({...form,gender:g.value})}>
                     {g.icon}<span>{g.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="form-group"><label className="form-label">What Best Describes You?</label>
+              <div className="gender-select">
+                {OCCUPATIONS.map(o=>(
+                  <div key={o.value} className={"gender-option"+(form.occupation===o.value?" selected":"")} onClick={()=>setForm({...form,occupation:o.value})}>
+                    {o.icon}<span>{o.label}</span>
                   </div>
                 ))}
               </div>
@@ -162,12 +187,14 @@ export default function Register() {
                 {NATIONALITIES.map(n=><option key={n} value={n}>{n}</option>)}
               </select>
             </div>
-            <div className="form-group"><label className="form-label">University</label>
-              <select name="university" className="form-input" value={form.university} onChange={handleChange} required>
-                <option value="">Select your university...</option>
-                {UNIVERSITIES.map(u=><option key={u} value={u}>{u}</option>)}
-              </select>
-            </div>
+            {form.occupation === "student" && (
+              <div className="form-group"><label className="form-label">University</label>
+                <select name="university" className="form-input" value={form.university} onChange={handleChange} required>
+                  <option value="">Select your university...</option>
+                  {UNIVERSITIES.map(u=><option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+            )}
             <div className="form-group"><label className="form-label">City</label>
               <select name="city" className="form-input" value={form.city} onChange={handleChange} required>
                 <option value="">Select your city...</option>

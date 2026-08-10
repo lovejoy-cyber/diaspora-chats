@@ -151,24 +151,17 @@ export default function Market() {
         posterTrustedSender: userProfile.trustedSender || false,
         status: "open", createdAt: serverTimestamp(),
       });
-      // Money transfer listings are the trust-critical core of this app, so they trigger
-      // a real notification to everyone — general (non-transfer) listings deliberately do
-      // NOT notify everyone, since that would make the bell meaningless as spam volume grows.
-      // Honest note: this broadcasts to all users rather than filtering by matching
-      // country/nationality — true per-person targeting would need querying and writing
-      // one notification per matching user, which is a reasonable next refinement if the
-      // "ALL" broadcast starts feeling too broad once the community grows.
-      if (isTransfer) {
-        try {
-          await addDoc(collection(db, "notifications"), {
-            recipientId: "ALL", urgent: false, icon: "💸",
-            title: "New transfer listing",
-            message: userProfile.fullName + " posted: " + title,
-            link: "/dashboard/market",
-            read: false, createdAt: serverTimestamp(),
-          });
-        } catch (e) {}
-      }
+      // Per explicit request, ALL listings now notify — not just transfers. The earlier
+      // scoping-down choice has been reversed on purpose.
+      try {
+        await addDoc(collection(db, "notifications"), {
+          recipientId: "ALL", urgent: false, icon: isTransfer ? "💸" : "🛍️",
+          title: isTransfer ? "New transfer listing" : "New marketplace listing",
+          message: userProfile.fullName + " posted: " + title,
+          link: "/dashboard/market",
+          read: false, createdAt: serverTimestamp(),
+        });
+      } catch (e) {}
       setShowForm(false); setImg(null); setPrev("");
     } catch { setErr("Could not post. Please try again."); }
     setPosting(false);

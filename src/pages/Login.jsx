@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../firebase/config";
+import ReactiveAvatar from "../components/ReactiveAvatar";
 
 const MAX = 6;
 const LOCK = 5 * 60 * 1000;
@@ -13,6 +14,7 @@ export default function Login() {
   const [ok, setOk] = useState("");
   const [loading, setLoading] = useState(false);
   const [tries, setTries] = useState(0);
+  const [focusedField, setFocusedField] = useState("none");
   const [lockUntil, setLockUntil] = useState(null);
   const [count, setCount] = useState(0);
 
@@ -70,16 +72,18 @@ export default function Login() {
         {err && <div className="error-msg">⚠️ {err}{locked ? " (" + count + "s)" : ""}</div>}
         {ok && <div className="success-msg">✅ {ok}</div>}
 
+        <ReactiveAvatar focusedField={focusedField} />
+
         <form onSubmit={submit}>
           <div className="form-group">
             <label className="form-label">Email Address</label>
             <input type="email" className="form-input" placeholder="you@email.com" value={email}
-              onChange={e => setEmail(e.target.value)} required autoComplete="email" disabled={locked} />
+              onChange={e => setEmail(e.target.value)} onFocus={() => setFocusedField("email")} onBlur={() => setFocusedField("none")} required autoComplete="email" disabled={locked} />
           </div>
           <div className="form-group">
             <label className="form-label">Password</label>
             <input type="password" className="form-input" placeholder="Your password" value={pw}
-              onChange={e => setPw(e.target.value)} required autoComplete="current-password" disabled={locked} />
+              onChange={e => setPw(e.target.value)} onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField("none")} required autoComplete="current-password" disabled={locked} />
           </div>
           <button type="submit" className="btn-primary" disabled={loading || locked}>
             {locked ? "Locked (" + count + "s)" : loading ? "Signing in…" : "Sign In"}

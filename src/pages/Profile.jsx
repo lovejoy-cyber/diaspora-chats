@@ -9,6 +9,8 @@ import { redeemPrivilegeCode } from "../lib/privilegeCodes";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
 import ProfileQR from "../components/ProfileQR";
+import { useTranslation } from "../lib/useTranslation";
+import { LANGUAGES } from "../lib/translations";
 
 const NATIONALITIES = ["Zimbabwean","Nigerian","Cameroonian","Congolese (DRC)","Congolese (ROC)","Ivorian","Senegalese","Malian","Burkinabe","Guinean","Ghanaian","Kenyan","Ethiopian","South African","Mozambican","Zambian","Tanzanian","Ugandan","Rwandan","Togolese","Beninese","Nigerien","Chadian","Sudanese","Libyan","Moroccan","Tunisian","Mauritanian","Algerian","Namibian","Botswanan","Angolan","Sierra Leonean","Liberian","Gambian","Malawian","Egyptian","Somali","Eritrean","Gabonese","Other"];
 const UNIVERSITIES = ["USTO-MB (Oran)","Université d'Oran 1","Université d'Oran 2","ENPO (Oran)","Université de Mostaganem","Université d'Alger 1","Université d'Alger 2","Université d'Alger 3","USTHB (Alger)","Université de Constantine 1","Université de Constantine 2","Université de Constantine 3","Université de Annaba","Université de Sétif","Université de Tlemcen","Université de Béjaïa","Université de Tizi Ouzou","Université de Blida","Université de Batna","Other"];
@@ -28,6 +30,7 @@ const PRESENCE_OPTIONS = [
 
 export default function Profile() {
   const { currentUser, userProfile, refreshProfile } = useAuth();
+  const { lang, setLang } = useTranslation();
   const navigate = useNavigate();
   const [tab, setTab] = useState("profile");
   const [editing, setEditing] = useState(false);
@@ -290,6 +293,30 @@ export default function Profile() {
 
       {tab === "settings" && (
         <>
+          <div className="card">
+            <div className="card-title">🌐 Language</div>
+            <p style={{ fontSize: 12.5, color: "var(--text2)", marginBottom: 14, lineHeight: 1.6 }}>
+              Translates the app's core navigation and buttons. Posts, messages, and other user-written
+              content stay in the language they were written in — this only changes DiasporaLink's own interface.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              {Object.entries(LANGUAGES).map(([code, label]) => (
+                <button
+                  key={code}
+                  onClick={() => setLang(code)}
+                  style={{
+                    flex: 1, padding: "10px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 700,
+                    border: "2px solid " + (lang === code ? "var(--primary)" : "var(--border)"),
+                    background: lang === code ? "rgba(59,130,246,.1)" : "transparent",
+                    color: lang === code ? "var(--primary-light)" : "var(--text2)",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="card">
             <div className="card-title">🎭 Presence Status</div>
             <p style={{ fontSize: 12.5, color: "var(--text2)", marginBottom: 14 }}>Choose how you appear to other members right now.</p>

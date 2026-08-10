@@ -102,7 +102,32 @@ textarea.form-input{resize:vertical;min-height:80px;line-height:1.6;}
 .main-header-title{font-size:16px;font-weight:800;}
 .main-body{padding:20px;overflow-y:auto;flex:1;}
 
-.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius2);padding:20px;margin-bottom:16px;}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius2);padding:20px;margin-bottom:16px;position:relative;transition:border-color .3s,box-shadow .3s;}
+.card:hover{border-color:var(--primary);box-shadow:0 0 0 1px rgba(59,130,246,.15),0 8px 24px rgba(59,130,246,.08);}
+
+/* ── Animated glowing border — a reusable utility class for anything that should feel
+   "alive" (avatars, featured cards, the daily check-in, etc). Pure CSS, no JS, no
+   external asset — a rotating conic gradient masked to just the border edge. ── */
+.glow-border{position:relative;border-radius:inherit;}
+.glow-border::before{
+  content:"";position:absolute;inset:-2px;border-radius:inherit;padding:2px;
+  background:conic-gradient(from var(--glow-angle,0deg),#3B82F6,#8B5CF6,#06B6D4,#3B82F6);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  animation:glowRotate 4s linear infinite;pointer-events:none;
+}
+@keyframes glowRotate{to{--glow-angle:360deg;}}
+@property --glow-angle{syntax:"<angle>";initial-value:0deg;inherits:false;}
+
+/* Softer, static-but-shimmering border for things that shouldn't spin (buttons, badges) */
+.shimmer-border{position:relative;overflow:hidden;}
+.shimmer-border::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(115deg,transparent 20%,rgba(255,255,255,.25) 40%,transparent 60%);
+  background-size:200% 100%;animation:shimmerSlide 2.8s ease-in-out infinite;pointer-events:none;
+}
+@keyframes shimmerSlide{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+
 .card-title{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
 
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:16px;}

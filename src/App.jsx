@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ProfileSetup from "./pages/ProfileSetup";
 import Dashboard from "./pages/Dashboard";
+import SplashScreen from "./components/SplashScreen";
 
 const IDLE_MS = 45 * 60 * 1000;
 
@@ -86,6 +87,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <SplashScreen />
         <AppRoutes />
       </AuthProvider>
     </BrowserRouter>

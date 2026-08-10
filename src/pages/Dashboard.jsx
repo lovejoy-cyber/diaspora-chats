@@ -16,6 +16,7 @@ import ViewProfile from "./ViewProfile";
 import NotificationBell from "../components/NotificationBell";
 import GlobalSearch from "../components/GlobalSearch";
 import IncomingCallListener from "../components/IncomingCallListener";
+import { useTranslation } from "../lib/useTranslation";
 
 const ROLE_LABELS = {
   admin: {label:"Super Admin", cls:"role-badge-admin"},
@@ -31,23 +32,24 @@ const ROLE_LABELS = {
 };
 
 const NAV = [
-  {path:"",label:"Feed",icon:"🏠",end:true},
-  {path:"messages",label:"Messages",icon:"💬"},
-  {path:"rooms",label:"Rooms & Groups",icon:"🌍"},
-  {path:"market",label:"Marketplace",icon:"🛍️"},
-  {path:"embassy",label:"Embassy",icon:"🏛️"},
-  {path:"calls",label:"Calls",icon:"📞"},
-  {path:"people",label:"People",icon:"👥"},
-  {path:"profile",label:"My Profile",icon:"👤"},
+  {path:"",labelKey:"feed",icon:"🏠",end:true},
+  {path:"messages",labelKey:"messages",icon:"💬"},
+  {path:"rooms",labelKey:"rooms",icon:"🌍"},
+  {path:"market",labelKey:"marketplace",icon:"🛍️"},
+  {path:"embassy",labelKey:"embassy",icon:"🏛️"},
+  {path:"calls",labelKey:"calls",icon:"📞"},
+  {path:"people",labelKey:"people",icon:"👥"},
+  {path:"profile",labelKey:"myProfile",icon:"👤"},
 ];
 
 // Staff/admin status now comes from AuthContext's ROLE_LEVELS (single source of truth).
 
 export default function Dashboard() {
   const { userProfile, isStaff, isAdmin } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem("dl_theme") || "dark");
+  const [theme, setTheme] = useState(() => localStorage.getItem("dl_theme") || "light");
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -83,7 +85,7 @@ export default function Dashboard() {
           <div className="nav-section-title">Menu</div>
           {NAV.map(item => (
             <NavLink key={item.path} to={item.path===""?"/dashboard":"/dashboard/"+item.path} end={item.end||false} className={({isActive})=>"nav-item"+(isActive?" active":"")}>
-              <span className="nav-icon">{item.icon}</span>{item.label}
+              <span className="nav-icon">{item.icon}</span>{t(item.labelKey)}
             </NavLink>
           ))}
           {isStaff && (

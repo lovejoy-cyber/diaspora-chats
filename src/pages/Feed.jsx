@@ -128,6 +128,17 @@ export default function Feed() {
           link: "/dashboard",
           read: false, createdAt: serverTimestamp(),
         }).catch(() => {});
+      } else {
+        // Per explicit request, every regular Feed post also notifies now — previously
+        // this was deliberately scoped down to avoid flooding the bell, but that choice
+        // has been reversed on purpose.
+        await addDoc(collection(db, "notifications"), {
+          recipientId: "ALL", urgent: false, icon: "📝",
+          title: "New post",
+          message: userProfile.fullName + " posted: " + (text.trim().slice(0, 70) || "shared something"),
+          link: "/dashboard",
+          read: false, createdAt: serverTimestamp(),
+        }).catch(() => {});
       }
       setText(""); setImg(null); setPrev(""); setDocF(null); setUrgent(false);
     } catch { alert("Post failed. Please try again."); }

@@ -180,6 +180,23 @@ export default function Rooms() {
       pinned:false,
       createdAt:serverTimestamp(),
     });
+    // Notify on room activity, but debounced to once per room per 10 minutes — notifying
+    // on literally every single message would make the bell fire constantly during any
+    // active conversation, which defeats the point of having it at all. This is the one
+    // deliberate exception to "notify on everything," because the literal version would
+    // make the bell actively unusable rather than just noisy.
+    const lastNotifyKey = "dl_room_notify_" + activeRoom.id;
+    const lastNotify = Number(sessionStorage.getItem(lastNotifyKey) || 0);
+    if (Date.now() - lastNotify > 10 * 60 * 1000) {
+      sessionStorage.setItem(lastNotifyKey, String(Date.now()));
+      addDoc(collection(db, "notifications"), {
+        recipientId: "ALL", urgent: false, icon: "🌍",
+        title: "New activity in " + activeRoom.name,
+        message: userProfile.fullName + ": " + filtered.slice(0, 60),
+        link: "/dashboard/rooms",
+        read: false, createdAt: serverTimestamp(),
+      }).catch(() => {});
+    }
     setText("");
   };
 
