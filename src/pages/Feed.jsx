@@ -9,6 +9,7 @@ import UserProfileModal from "../components/UserProfileModal";
 import Lightbox from "../components/Lightbox";
 import Stories from "../components/Stories";
 import DailyCheckIn from "../components/DailyCheckIn";
+import SpotlightCard from "../components/SpotlightCard";
 
 const EMOJIS = ["❤️","😂","😮","😢","🔥","👏","🙏","💯"];
 
@@ -256,7 +257,7 @@ export default function Feed() {
       )}
 
       {list.map(p => (
-        <div key={p.id} className="fd-card" style={p.urgent ? { borderColor: "rgba(239,68,68,.4)" } : {}}>
+        <SpotlightCard key={p.id} className="fd-card" style={p.urgent ? { borderColor: "rgba(239,68,68,.4)" } : {}}>
           {p.urgent && (
             <div style={{ background: "rgba(239,68,68,.1)", color: "#fca5a5", fontSize: 11, fontWeight: 800, padding: "6px 14px", letterSpacing: .5 }}>
               🚨 URGENT NOTICE
@@ -343,7 +344,7 @@ export default function Feed() {
               </div>
             </div>
           )}
-        </div>
+        </SpotlightCard>
       ))}
 
       {viewUid && <UserProfileModal uid={viewUid} onClose={() => setViewUid(null)} />}

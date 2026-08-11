@@ -6,6 +6,7 @@ import { auth, db } from "../firebase/config";
 import { COUNTRY_ROOMS } from "../lib/rooms";
 import { getOrCreatePersistentDeviceId } from "../lib/deviceFingerprint";
 import ReactiveAvatar from "../components/ReactiveAvatar";
+import { useSpotlight } from "../lib/useSpotlight";
 
 const NATIONALITIES = COUNTRY_ROOMS.map(r => r.country).concat(["Algerian","Other"]);
 const UNIVERSITIES = ["USTO-MB (Oran)","Université d'Oran 1","Université d'Oran 2","ENPO (Oran)","Université de Mostaganem","Université d'Alger 1","Université d'Alger 2","Université d'Alger 3","USTHB (Alger)","Université de Constantine 1","Université de Constantine 2","Université de Constantine 3","Université de Annaba","Université de Sétif","Université de Tlemcen","Université de Béjaïa","Université de Tizi Ouzou","Université de Blida","Université de Batna","Other"];
@@ -24,6 +25,7 @@ const OCCUPATIONS = [
 ];
 
 export default function Register() {
+  const spot = useSpotlight();
   const [step, setStep] = useState(1);
   const [focusedField, setFocusedField] = useState("none");
   const [form, setForm] = useState({fullName:"",email:"",password:"",confirmPassword:"",nationality:"",university:"",occupation:"",city:"",gender:""});
@@ -132,7 +134,7 @@ export default function Register() {
       <div className="aurora-bg">
         <div className="aurora-blob b1" /><div className="aurora-blob b2" /><div className="aurora-blob b3" />
       </div>
-      <div className="auth-card" style={{maxWidth:480, position: "relative", zIndex: 1}}>
+      <div ref={spot.ref} className="auth-card spotlight spotlight-border" style={{maxWidth:480, position: "relative", zIndex: 1}} onMouseMove={spot.onMouseMove} onTouchMove={spot.onTouchMove} onTouchStart={spot.onTouchStart}>
         <div className="auth-logo">
           <span className="auth-logo-icon">🌍</span>
           <h1>DiasporaLink</h1>

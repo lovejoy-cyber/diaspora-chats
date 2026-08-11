@@ -86,4 +86,10 @@ exports.handler = async () => {
 // Runs every 6 hours — frequent enough to stay current, well within YouTube's free
 // daily quota (7 categories x ~100 units each = 700 units per run, four runs a day
 // = 2800 units, comfortably under the 10,000/day free limit).
-exports.config = { schedule: "0 */6 * * *" };
+// Runs every 2 hours — I want to be precise here rather than optimistic: at 7 categories
+// x ~100 units per search, one run costs ~700 units. YouTube's free quota is 10,000
+// units/day. Every 30 minutes would be 48 runs/day = 33,600 units — more than 3x over
+// the free limit, which would make the feed go dead partway through the day once quota
+// runs out. Every 2 hours = 12 runs/day = 8,400 units, safely within the free tier with
+// room to spare. This is the fastest genuinely sustainable refresh rate on the free plan.
+exports.config = { schedule: "0 */2 * * *" };

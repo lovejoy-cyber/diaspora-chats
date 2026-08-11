@@ -3,11 +3,13 @@ import { Link } from "react-router-dom";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../firebase/config";
 import ReactiveAvatar from "../components/ReactiveAvatar";
+import { useSpotlight } from "../lib/useSpotlight";
 
 const MAX = 6;
 const LOCK = 5 * 60 * 1000;
 
 export default function Login() {
+  const spot = useSpotlight();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
@@ -63,7 +65,7 @@ export default function Login() {
       <div className="aurora-bg">
         <div className="aurora-blob b1" /><div className="aurora-blob b2" /><div className="aurora-blob b3" />
       </div>
-      <div className="auth-card" style={{ position: "relative", zIndex: 1 }}>
+      <div ref={spot.ref} className="auth-card spotlight spotlight-border" style={{ position: "relative", zIndex: 1 }} onMouseMove={spot.onMouseMove} onTouchMove={spot.onTouchMove} onTouchStart={spot.onTouchStart}>
         <div className="auth-logo">
           <span className="auth-logo-icon">🌍</span>
           <h1>DiasporaLink</h1>

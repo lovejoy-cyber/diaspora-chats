@@ -70,6 +70,7 @@ textarea.form-input{resize:vertical;min-height:80px;line-height:1.6;}
 .gender-option.selected{border-color:var(--primary);background:rgba(59,130,246,0.1);}
 
 .btn-primary{width:100%;padding:13px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:white;border:none;border-radius:var(--radius);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;transition:all 0.2s;margin-top:4px;box-shadow:0 4px 15px rgba(59,130,246,0.3);}
+.btn-primary:active:not(:disabled){transform:scale(.97);}
 .btn-primary:hover:not(:disabled){box-shadow:0 6px 24px rgba(59,130,246,.55),0 0 0 3px rgba(139,92,246,.15);transform:translateY(-1px);}
 .btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 25px rgba(59,130,246,0.4);}
 .btn-primary:disabled{opacity:0.5;cursor:not-allowed;}
@@ -122,6 +123,7 @@ textarea.form-input{resize:vertical;min-height:80px;line-height:1.6;}
 .sidebar-nav{padding:10px 8px;flex:1;}
 .nav-section-title{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;padding:0 8px;margin:14px 0 5px;}
 .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;cursor:pointer;transition:all 0.15s;font-size:13px;font-weight:500;color:var(--text2);text-decoration:none;margin-bottom:1px;}
+.nav-item:active{transform:scale(.97);}
 .nav-item:hover{background:rgba(255,255,255,0.05);color:var(--text);}
 .nav-item.active{background:rgba(59,130,246,0.12);color:var(--primary-light);font-weight:600;position:relative;}
 .nav-item.active::before{content:"";position:absolute;left:0;top:2px;bottom:2px;width:3px;border-radius:3px;background:linear-gradient(180deg,#3B82F6,#8B5CF6,#06B6D4);box-shadow:0 0 8px rgba(96,165,250,.7);}
@@ -135,6 +137,29 @@ textarea.form-input{resize:vertical;min-height:80px;line-height:1.6;}
 
 .card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius2);padding:20px;margin-bottom:16px;position:relative;transition:border-color .3s,box-shadow .3s;}
 .card:hover{border-color:var(--primary);box-shadow:0 0 0 1px rgba(59,130,246,.15),0 8px 24px rgba(59,130,246,.08);}
+
+/* ── Genuine pointer-reactive spotlight — tracks the real cursor/touch position via
+   --spot-x/--spot-y custom properties (set by useSpotlight.js), not a fixed animation.
+   The glow visibly moves exactly where you point or tap. ── */
+.spotlight{position:relative;overflow:hidden;}
+.spotlight::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s ease;
+  background:radial-gradient(circle 180px at var(--spot-x,50%) var(--spot-y,50%),rgba(96,165,250,.22),rgba(139,92,246,.1) 45%,transparent 70%);
+}
+.spotlight:hover::after,.spotlight:active::after{opacity:1;}
+.spotlight-border{position:relative;}
+.spotlight-border::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;padding:1.5px;pointer-events:none;opacity:0;transition:opacity .3s ease;
+  background:radial-gradient(circle 140px at var(--spot-x,50%) var(--spot-y,50%),#60A5FA,#A78BFA 55%,transparent 75%);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+}
+.spotlight-border:hover::before,.spotlight-border:active::before{opacity:1;}
+
+/* Buttons and nav items get a subtle ripple-scale reaction on press — real tactile
+   feedback, not just a color change. */
+.tap-react{transition:transform .12s ease;}
+.tap-react:active{transform:scale(.96);}
 
 /* ── Animated glowing border — a reusable utility class for anything that should feel
    "alive" (avatars, featured cards, the daily check-in, etc). Pure CSS, no JS, no
