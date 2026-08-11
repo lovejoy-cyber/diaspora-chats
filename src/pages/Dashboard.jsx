@@ -142,7 +142,6 @@ export default function Dashboard() {
               <div onClick={()=>{navigate("/dashboard/profile");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>👤 My Profile</div>
               <div onClick={()=>{navigate("/dashboard/rooms");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>🌍 Rooms & Groups</div>
               <div onClick={()=>{navigate("/dashboard/embassy");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>🏛️ Embassy</div>
-              <div onClick={()=>{navigate("/dashboard/reels");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>🎬 Reels</div>
               <div onClick={()=>{navigate("/dashboard/assistant");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>🤖 Assistant</div>
               <div onClick={()=>{navigate("/dashboard/people");setMobileMenuOpen(false);}} style={{padding:"11px 8px",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>👥 People</div>
               {isStaff && (
@@ -173,10 +172,13 @@ export default function Dashboard() {
 
         <nav className="mobile-nav">
           <NavLink to="/dashboard" end className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
-            <span className="mobile-nav-icon">🏠</span>Feed
+            <span className="mobile-nav-icon">🏠</span>Posts
           </NavLink>
           <NavLink to="/dashboard/messages" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
             <span className="mobile-nav-icon">💬</span>Chat
+          </NavLink>
+          <NavLink to="/dashboard/reels" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
+            <span className="mobile-nav-icon">🎬</span>Reels
           </NavLink>
           <NavLink to="/dashboard/market" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
             <span className="mobile-nav-icon">🛍️</span>Market

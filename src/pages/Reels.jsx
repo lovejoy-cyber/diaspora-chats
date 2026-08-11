@@ -37,8 +37,20 @@ const CATEGORY_LABELS = {
 };
 
 function detectEmbedUrl(link) {
-  const yt = link.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
-  if (yt) return { type: "youtube", url: "https://www.youtube.com/embed/" + yt[1] + "?autoplay=0" };
+  // Handles every common real-world YouTube link shape: standard watch links, shortened
+  // youtu.be links, and Shorts links (YouTube's actual short-form video format — the
+  // most likely thing anyone means by "reels" on YouTube) — plus links with extra
+  // tracking parameters after the video ID, which the previous version didn't handle.
+  const patterns = [
+    /youtube\.com\/watch\?(?:.*&)?v=([\w-]{6,})/,
+    /youtu\.be\/([\w-]{6,})/,
+    /youtube\.com\/shorts\/([\w-]{6,})/,
+    /youtube\.com\/embed\/([\w-]{6,})/,
+  ];
+  for (const pattern of patterns) {
+    const match = link.match(pattern);
+    if (match) return { type: "youtube", videoId: match[1], url: "https://www.youtube.com/embed/" + match[1] + "?autoplay=0" };
+  }
   const tiktok = link.match(/tiktok\.com\/@[\w.]+\/video\/(\d+)/);
   if (tiktok) return { type: "tiktok", embedHtml: true, videoId: tiktok[1] };
   return { type: "link", url: link };
@@ -78,7 +90,7 @@ export default function Reels() {
         source: embed.type, category: "manual",
         title: titleInput.trim() || "Shared by " + userProfile.fullName,
         channelTitle: userProfile.fullName, rawLink: linkInput.trim(),
-        embedUrl: embed.url || null, embedVideoId: embed.videoId || null,
+        embedUrl: embed.url || null, videoId: embed.videoId || null,
         postedBy: currentUser.uid, hidden: false, fetchedAt: serverTimestamp(),
       });
       setLinkInput(""); setTitleInput(""); setShowAdd(false);
