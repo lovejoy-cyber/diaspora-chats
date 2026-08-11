@@ -7,6 +7,8 @@ import Feed from "./Feed";
 import Messages from "./Messages";
 import Market from "./Market";
 import Embassy from "./Embassy";
+import Reels from "./Reels";
+import Assistant from "./Assistant";
 import People from "./People";
 import Rooms from "./Rooms";
 import Profile from "./Profile";
@@ -37,6 +39,8 @@ const NAV = [
   {path:"rooms",labelKey:"rooms",icon:"🌍"},
   {path:"market",labelKey:"marketplace",icon:"🛍️"},
   {path:"embassy",labelKey:"embassy",icon:"🏛️"},
+  {path:"reels",labelKey:"reels",icon:"🎬"},
+  {path:"assistant",labelKey:"assistant",icon:"🤖"},
   {path:"calls",labelKey:"calls",icon:"📞"},
   {path:"people",labelKey:"people",icon:"👥"},
   {path:"profile",labelKey:"myProfile",icon:"👤"},
@@ -155,6 +159,8 @@ export default function Dashboard() {
           <Route path="messages" element={<Messages />} />
           <Route path="market" element={<Market />} />
           <Route path="embassy" element={<Embassy />} />
+          <Route path="reels" element={<Reels />} />
+          <Route path="assistant" element={<Assistant />} />
           <Route path="rooms" element={<Rooms />} />
           <Route path="people" element={<People />} />
           <Route path="calls" element={<Calls />} />

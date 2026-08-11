@@ -62,8 +62,8 @@ const CSS = `
 .ra-walker.landed.ra-covering .ra-arm-r{transform:rotate(-70deg) translateY(2px);}
 
 .ra-character{position:absolute;top:0;left:50%;transform:translateX(-50%);width:66px;height:66px;border-radius:50%;
-  background:radial-gradient(circle at 32% 28%,#93C5FD,#3B82F6 46%,#7C3AED 100%);
-  box-shadow:0 6px 18px rgba(59,130,246,.4),inset 0 -6px 10px rgba(0,0,0,.18),inset 0 4px 8px rgba(255,255,255,.25);
+  background:radial-gradient(circle at 30% 25%,#BFDBFE,#60A5FA 35%,#3B82F6 62%,#5B21B6 100%);
+  box-shadow:0 8px 22px rgba(59,130,246,.5),0 0 0 1px rgba(255,255,255,.08) inset,inset 0 -8px 14px rgba(15,23,42,.35),inset 0 5px 10px rgba(255,255,255,.35);
   z-index:2;}
 .ra-continent{position:absolute;background:rgba(255,255,255,.22);border-radius:40% 60% 55% 45%;}
 .ra-c1{width:22px;height:16px;top:14px;left:10px;transform:rotate(-12deg);}
@@ -74,8 +74,8 @@ const CSS = `
 .ra-eye.covered{transform:scaleY(.1) !important;animation:none;}
 .ra-pupil{width:5.5px;height:5.5px;border-radius:50%;background:#0F172A;position:absolute;top:3.2px;left:3.2px;transition:transform .22s ease;}
 
-.ra-mouth{position:absolute;top:42px;left:50%;transform:translateX(-50%);width:16px;height:8px;border-bottom:2.5px solid rgba(255,255,255,.9);border-radius:0 0 10px 10px;z-index:3;transition:all .25s ease;}
-.ra-mouth.smile{width:20px;height:10px;}
+.ra-mouth{position:absolute;top:40px;left:50%;transform:translateX(-50%);width:10px;height:3px;border-radius:3px;background:rgba(255,255,255,.55);z-index:3;transition:all .3s ease;}
+.ra-mouth.smile{width:16px;height:3px;background:rgba(255,255,255,.8);box-shadow:0 0 6px rgba(255,255,255,.5);}
 
 .ra-sparkle{position:absolute;border-radius:50%;background:#fff;opacity:0;pointer-events:none;}
 .ra-walker.landed .ra-sparkle{animation:raSparklePop .9s ease-out forwards;}

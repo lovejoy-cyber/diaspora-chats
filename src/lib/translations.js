@@ -9,6 +9,7 @@ const DICT = {
   en: {
     feed: "Feed", messages: "Messages", rooms: "Rooms & Groups", marketplace: "Marketplace",
     embassy: "Embassy", calls: "Calls", people: "People", myProfile: "My Profile",
+    reels: "Reels", assistant: "Assistant",
     signIn: "Sign In", signOut: "Sign Out", createAccount: "Create Account",
     email: "Email Address", password: "Password", fullName: "Full Name",
     save: "Save", cancel: "Cancel", post: "Post", send: "Send", search: "Search",
@@ -19,6 +20,7 @@ const DICT = {
   fr: {
     feed: "Fil d'actualité", messages: "Messages", rooms: "Salons & Groupes", marketplace: "Marché",
     embassy: "Ambassade", calls: "Appels", people: "Personnes", myProfile: "Mon Profil",
+    reels: "Vidéos", assistant: "Assistant",
     signIn: "Se connecter", signOut: "Se déconnecter", createAccount: "Créer un compte",
     email: "Adresse e-mail", password: "Mot de passe", fullName: "Nom complet",
     save: "Enregistrer", cancel: "Annuler", post: "Publier", send: "Envoyer", search: "Rechercher",
