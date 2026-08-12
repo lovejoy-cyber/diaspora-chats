@@ -3,12 +3,8 @@ compatibility_flags = ["nodejs_compat"]
 
 pages_build_output_dir = "dist"
 
-[[routes]]
-pattern = "/.netlify/functions/*"
-zone_name = "diaspora-chats.pages.dev"
-
 [env.production]
-vars = { GROQ_API_KEY = "YOUR_GROQ_API_KEY" }
+vars = { GROQ_API_KEY = "sk_your_actual_groq_key_here" }
 
 [env.development]  
-vars = { GROQ_API_KEY = "YOUR_GROQ_API_KEY" }
+vars = { GROQ_API_KEY = "sk_your_actual_groq_key_here" }
