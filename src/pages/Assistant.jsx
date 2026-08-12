@@ -72,7 +72,7 @@ export default function Assistant() {
     setInput("");
     setLoading(true);
     try {
-      const res = await fetch("/.netlify/functions/ask-assistant", {
+      const res = await fetch("/functions/ask-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: content, history: messages }),
