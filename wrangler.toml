@@ -1,0 +1,16 @@
+# Cloudflare Pages configuration file, read directly from the project root at build
+# time. This is the real, documented fix for the "Could not resolve crypto/zlib"
+# build error — that error happens because Cloudflare's Pages Functions bundler
+# (esbuild, run via Wrangler) does not automatically know that "crypto" and "zlib"
+# are Cloudflare-provided Node built-ins available at runtime; it needs to be told
+# explicitly via this config, in addition to (not instead of) the nodejs_compat flag
+# already set in the dashboard.
+#
+# This file does NOT affect your main Vite build (npm run build still produces dist/
+# exactly as before) — it only configures how Cloudflare's Functions bundler resolves
+# imports inside the functions/ folder.
+
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+pages_build_output_dir = "dist"

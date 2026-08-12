@@ -1,21 +1,13 @@
-// CLOUDFLARE PAGES FUNCTION — converted from netlify/functions/generate-agora-token.js
+// CLOUDFLARE PAGES FUNCTION — Agora RTC token generator using the real, official
+// "agora-token" npm package (proven-correct implementation, not hand-rolled crypto).
 //
-// Real, honest differences from the Netlify version that made this a genuine rewrite,
-// not a copy-paste:
-// 1. Cloudflare Pages Functions use ES module exports (onRequestGet/onRequestPost/
-//    onRequest), not Netlify's exports.handler(event).
-// 2. Environment variables come through context.env, NOT process.env — Cloudflare
-//    Workers don't have Node's process global by default.
-// 3. require() doesn't work here — Workers run ES modules, so this uses import.
-// 4. The agora-token package uses Node's crypto module internally for HMAC signing.
-//    This REQUIRES the "nodejs_compat" compatibility flag to be enabled in Cloudflare
-//    Pages settings (Settings → Functions → Compatibility flags → add "nodejs_compat"),
-//    otherwise this will fail at runtime with a missing-module error. This is a real
-//    setup step on your end, not optional.
-//
-// File location matters: this file at functions/generate-agora-token.js is
-// automatically routed by Cloudflare to the URL /generate-agora-token — no extra
-// routing config needed, that's how Pages Functions work.
+// The build failure ("Could not resolve crypto/zlib") is a bundler configuration
+// issue, not a runtime incompatibility — Cloudflare Workers DO support Node's crypto
+// module at runtime when nodejs_compat is enabled; the problem is specifically that
+// esbuild (Cloudflare's build-time bundler) doesn't know to treat "crypto" and "zlib"
+// as Cloudflare-provided built-ins unless told to via wrangler.toml's build config.
+// See wrangler.toml at the project root for that fix — this file itself is unchanged
+// from the standard, correct implementation.
 
 import { RtcTokenBuilder, RtcRole } from "agora-token";
 

@@ -1,0 +1,72 @@
+=====================================================================
+DIASPORALINK — COMPLETE ENVIRONMENT VARIABLES REFERENCE
+=====================================================================
+
+There are TWO separate places variables go now, because Cloudflare
+splits your main site (Pages) from the scheduled reels fetcher
+(a separate Worker). Copy the right block into the right place.
+
+
+=====================================================================
+PLACE 1 — CLOUDFLARE PAGES
+(Dashboard → Workers & Pages → diaspora-chats → Settings →
+ Environment variables → Add variable)
+=====================================================================
+
+These power the main app AND the two on-demand functions
+(generate-agora-token, ask-assistant).
+
+--- Frontend variables (safe to be public, used by the browser app) ---
+VITE_FIREBASE_API_KEY=AIzaSyAAiJTAj2Mj1n6V_S1e128QxczGxEwEqw8
+VITE_FIREBASE_AUTH_DOMAIN=diasporalink-app-df914.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=diasporalink-app-df914
+VITE_FIREBASE_STORAGE_BUCKET=diasporalink-app-df914.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=625361470229
+VITE_FIREBASE_APP_ID=1:625361470229:web:e31489b3871117d98c9f1c
+VITE_CLOUDINARY_CLOUD_NAME=v9kohpgl
+VITE_CLOUDINARY_UPLOAD_PRESET=diasporalink_uploads
+
+--- Server-side secrets (NEVER prefix with VITE_ — these must stay
+    hidden from the browser, only used inside the Functions) ---
+AGORA_APP_ID=239608a7432f4a6facc81a29d4c7d71f
+AGORA_APP_CERTIFICATE=bcb5617bcfd043ebb28289318e280a57
+GROQ_API_KEY=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
+
+--- Also required on the Pages project (Settings → Functions) ---
+Compatibility flag: nodejs_compat
+(This is a checkbox/toggle, not a variable — the Agora token
+ function needs it to run its cryptographic signing correctly.)
+
+
+=====================================================================
+PLACE 2 — THE SEPARATE REELS WORKER
+(cloudflare-reels-worker/ folder → deployed via `npx wrangler deploy`
+ → then set at: Dashboard → Workers & Pages →
+ diasporalink-fetch-reels → Settings → Variables and Secrets)
+=====================================================================
+
+This Worker is its OWN Cloudflare project, separate from Pages —
+it does not see the variables you set in Place 1. It needs its
+own copy of only what it actually uses:
+
+YOUTUBE_API_KEY=AIzaSyA2Xu8_MbcjT4S9a7_MHXgku5oOg-YHYQw
+FIREBASE_PROJECT_ID=diasporalink-app-df914
+
+(FIREBASE_PROJECT_ID is optional — the code already defaults to
+ diasporalink-app-df914 if this isn't set, but setting it explicitly
+ is safer if you ever change Firebase projects later.)
+
+
+=====================================================================
+QUICK CHECKLIST
+=====================================================================
+
+[ ] 8 VITE_ variables added to Pages
+[ ] AGORA_APP_ID added to Pages (no VITE_ prefix)
+[ ] AGORA_APP_CERTIFICATE added to Pages (no VITE_ prefix)
+[ ] GROQ_API_KEY added to Pages (no VITE_ prefix)
+[ ] nodejs_compat flag enabled on Pages → Functions settings
+[ ] Reels Worker deployed via wrangler
+[ ] YOUTUBE_API_KEY added to the Reels Worker specifically
+[ ] Redeploy Pages after adding variables (they only apply to
+    NEW deploys, same rule as Netlify)
