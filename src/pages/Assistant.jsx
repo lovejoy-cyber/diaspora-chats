@@ -72,7 +72,7 @@ export default function Assistant() {
     setInput("");
     setLoading(true);
     try {
-      const res = await fetch("/ask-assistant", {
+      const res = await fetch("/.netlify/functions/ask-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: content, history: messages }),
@@ -81,6 +81,7 @@ export default function Assistant() {
       const data = await res.json();
       setMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
     } catch (e) {
+      console.error("Assistant error:", e);
       setError("Could not reach the assistant. Please try again in a moment.");
     }
     setLoading(false);
