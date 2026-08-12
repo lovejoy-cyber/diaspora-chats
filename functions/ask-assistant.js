@@ -1,31 +1,36 @@
-// AI assistant endpoint — powered by Groq (fast, free-tier-friendly LLM inference).
-// The GROQ_API_KEY lives only in Netlify's environment variables, never in frontend code
-// or committed to git — same security pattern as the Agora App Certificate.
+// CLOUDFLARE PAGES FUNCTION — converted from netlify/functions/ask-assistant.js
+// Same real conversion notes as generate-agora-token.js apply: ES module exports,
+// context.env instead of process.env, native fetch() (which Workers support natively,
+// no import needed — that part is actually simpler than Netlify's Node environment).
 
-exports.handler = async (event) => {
-  const headers = {
+function corsHeaders() {
+  return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Content-Type": "application/json",
   };
+}
 
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 200, headers, body: "" };
-  }
+export async function onRequestOptions() {
+  return new Response("", { status: 200, headers: corsHeaders() });
+}
 
-  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+export async function onRequestPost(context) {
+  const { request, env } = context;
+  const headers = corsHeaders();
+
+  const GROQ_API_KEY = env.GROQ_API_KEY;
   if (!GROQ_API_KEY) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: "Server is missing GROQ_API_KEY environment variable." }) };
+    return new Response(JSON.stringify({ error: "Server is missing GROQ_API_KEY environment variable." }), { status: 500, headers });
   }
 
   try {
-    const { message, history } = JSON.parse(event.body || "{}");
+    const { message, history } = await request.json();
     if (!message || !message.trim()) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "Missing 'message'." }) };
+      return new Response(JSON.stringify({ error: "Missing 'message'." }), { status: 400, headers });
     }
 
-    // Keep a short rolling history (last 6 turns) so replies stay fast and cheap, while
-    // still feeling like a real conversation rather than a one-shot Q&A.
     const messages = [
       {
         role: "system",
@@ -59,20 +64,14 @@ exports.handler = async (event) => {
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error("Groq API error:", res.status, errText);
-      return { statusCode: 502, headers, body: JSON.stringify({ error: "AI service returned an error (" + res.status + ")." }) };
+      return new Response(JSON.stringify({ error: "AI service returned an error (" + res.status + ")." }), { status: 502, headers });
     }
 
     const data = await res.json();
     const reply = data.choices?.[0]?.message?.content || "Sorry, I couldn't generate a reply just now.";
 
-    return {
-      statusCode: 200,
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ reply }),
-    };
+    return new Response(JSON.stringify({ reply }), { status: 200, headers });
   } catch (err) {
-    console.error("Assistant function error:", err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to get a response: " + err.message }) };
+    return new Response(JSON.stringify({ error: "Failed to get a response: " + err.message }), { status: 500, headers });
   }
-};
+}

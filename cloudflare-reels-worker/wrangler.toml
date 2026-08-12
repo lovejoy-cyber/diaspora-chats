@@ -1,0 +1,17 @@
+# This is a SEPARATE Cloudflare Worker, deployed independently from your main Pages
+# project — this is a genuine, honest architectural difference from Netlify, not
+# something I can smooth over. Cloudflare Pages Functions only run in response to an
+# HTTP request; they have no equivalent to Netlify's "Scheduled Functions." Real
+# scheduled/cron execution on Cloudflare is a Workers feature (Cron Triggers), which
+# requires its own wrangler.toml and its own `npx wrangler deploy` — a second, separate
+# deployment alongside your Pages site, not something that lives inside the Pages project.
+
+name = "diasporalink-fetch-reels"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+
+# Runs every 2 hours — same safe frequency as the Netlify version, calculated against
+# YouTube's real 10,000 units/day free quota (7 categories x ~100 units = ~700/run,
+# 12 runs/day = ~8,400/day, safely under the limit).
+[triggers]
+crons = ["0 */2 * * *"]

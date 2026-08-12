@@ -60,7 +60,6 @@ export default function Reels() {
   const { currentUser, userProfile } = useAuth();
   const isStaff = ["embassy", "admin", "president"].includes(userProfile?.role);
   const [reels, setReels] = useState([]);
-  const [activeCat, setActiveCat] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [linkInput, setLinkInput] = useState("");
   const [titleInput, setTitleInput] = useState("");
@@ -103,19 +102,10 @@ export default function Reels() {
     await updateDoc(doc(db, "reels", id), { hidden: true });
   };
 
-  const filtered = activeCat === "all" ? reels : reels.filter(r => r.category === activeCat);
-  const categories = ["all", ...new Set(reels.map(r => r.category))];
+  const filtered = reels;
 
   return (
     <div className="rl-page">
-      <div className="rl-cat-filter">
-        {categories.map(c => (
-          <div key={c} className={"rl-cat-chip" + (activeCat === c ? " on" : "")} onClick={() => setActiveCat(c)}>
-            {c === "all" ? "🌍 All" : CATEGORY_LABELS[c] || c}
-          </div>
-        ))}
-      </div>
-
       {filtered.length === 0 && (
         <div className="rl-empty">
           <div style={{ fontSize: 42 }}>🎬</div>
@@ -147,14 +137,12 @@ export default function Reels() {
             <span className="rl-source-badge">{r.source === "youtube" ? "▶ YouTube" : r.source === "tiktok" ? "TikTok" : "Link"}</span>
 
             <div className="rl-overlay">
-              <span className="rl-cat">{CATEGORY_LABELS[r.category] || r.category}</span>
               <div className="rl-title">{r.title}</div>
               <div className="rl-channel">{r.channelTitle}</div>
             </div>
 
             <div className="rl-actions">
               {isStaff && <button className="rl-action-btn" onClick={() => hideReel(r.id)} title="Hide">🚫</button>}
-              {r.rawLink && <a className="rl-action-btn" href={r.rawLink} target="_blank" rel="noreferrer" title="Open original">↗</a>}
             </div>
           </div>
         </div>

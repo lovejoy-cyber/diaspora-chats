@@ -127,7 +127,9 @@ export const AGORA_APP_ID = "239608a7432f4a6facc81a29d4c7d71f";
 
 export async function fetchAgoraToken(channel, uid) {
   try {
-    const res = await fetch("/.netlify/functions/generate-agora-token?channel=" + encodeURIComponent(channel) + "&uid=" + encodeURIComponent(uid));
+    // Cloudflare Pages Functions are routed directly by filename — no "/.netlify/functions/"
+    // prefix needed, unlike Netlify. functions/generate-agora-token.js maps to this exact path.
+    const res = await fetch("/generate-agora-token?channel=" + encodeURIComponent(channel) + "&uid=" + encodeURIComponent(uid));
     if (!res.ok) throw new Error("Token server returned " + res.status);
     const data = await res.json();
     if (!data.token) throw new Error("Token server response missing token");

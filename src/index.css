@@ -137,7 +137,16 @@ textarea.form-input{resize:vertical;min-height:80px;line-height:1.6;}
 .nav-icon{font-size:16px;width:22px;text-align:center;flex-shrink:0;}
 .sidebar-bottom{padding:12px 8px;border-top:1px solid var(--border);}
 
-.main-content{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.main-content{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;
+  background:radial-gradient(ellipse 900px 500px at 15% -10%,rgba(59,130,246,.05),transparent 60%),
+             radial-gradient(ellipse 700px 500px at 100% 110%,rgba(139,92,246,.045),transparent 60%),
+             var(--bg);
+  background-size:100% 100%,100% 100%,100% 100%;
+  animation:bgWash 16s ease-in-out infinite alternate;}
+@keyframes bgWash{
+  0%{background-position:0% 0%,100% 100%,0 0;}
+  100%{background-position:8% 3%,92% 97%,0 0;}
+}
 .main-header{background:var(--bg-card);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:12px;}
 .main-header-title{font-size:16px;font-weight:800;}
 .main-body{padding:20px;overflow-y:auto;flex:1;}
@@ -220,6 +229,14 @@ textarea.form-input{resize:vertical;min-height:80px;line-height:1.6;}
   .sidebar{display:none;}
   .form-row{grid-template-columns:1fr;}
   .auth-card{padding:24px 18px;}
+  /* Mobile-specific: hover events are unreliable on touchscreens, so effects need to be
+     noticeably stronger on real tap (:active) since that's the only interaction phones
+     actually get — a subtle effect tuned for mouse-hover reads as invisible on a phone. */
+  .spotlight:active::after{opacity:1;background:radial-gradient(circle 140px at var(--spot-x,50%) var(--spot-y,50%),rgba(96,165,250,.4),rgba(139,92,246,.22) 45%,transparent 72%);}
+  .spotlight-border:active::before{opacity:1;background:radial-gradient(circle 120px at var(--spot-x,50%) var(--spot-y,50%),#93C5FD,#C4B5FD 55%,transparent 78%);}
+  .btn-primary:active:not(:disabled){transform:scale(.94);box-shadow:0 2px 20px rgba(59,130,246,.6);}
+  .nav-item:active{transform:scale(.94);background:rgba(59,130,246,.18);}
+  .mobile-nav-item:active .mobile-nav-icon{filter:drop-shadow(0 0 10px rgba(96,165,250,1));transform:scale(1.15);}
   .setup-card{padding:24px 18px;}
   .main-body{padding:14px 12px;}
   .main-header{padding:10px 14px;}
@@ -237,7 +254,7 @@ textarea.form-input{resize:vertical;min-height:80px;line-height:1.6;}
   .mobile-nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;text-decoration:none;color:var(--text2);font-size:9px;font-weight:600;padding:4px 2px;transition:color 0.15s;min-width:0;}
   .mobile-nav-item.active{color:var(--primary-light);}
   .mobile-nav-item.active .mobile-nav-icon{filter:drop-shadow(0 0 6px rgba(96,165,250,.9));}
-  .mobile-nav-icon{font-size:19px;line-height:1;}
+  .mobile-nav-icon{font-size:19px;line-height:1;transition:transform .15s ease,filter .15s ease;}
   .main-content{padding-bottom:72px;height:100vh;}
   .mobile-only-menu-btn{display:flex!important;align-items:center;}
   .gs-wrapper{max-width:none!important;}

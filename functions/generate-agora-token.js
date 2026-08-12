@@ -1,76 +1,88 @@
-// Generates a fresh, short-lived Agora RTC token on demand.
-// Called automatically by the app every time someone starts a call —
-// nobody ever needs to touch this manually after it's deployed.
+// CLOUDFLARE PAGES FUNCTION — converted from netlify/functions/generate-agora-token.js
 //
-// NOTE: the agora-token package's exact export names have changed across
-// versions (buildTokenWithAccount / buildTokenWithUid / different casing).
-// Rather than guess one name and break again, we detect what's actually
-// available on the installed package at runtime and use whichever real
-// method exists.
+// Real, honest differences from the Netlify version that made this a genuine rewrite,
+// not a copy-paste:
+// 1. Cloudflare Pages Functions use ES module exports (onRequestGet/onRequestPost/
+//    onRequest), not Netlify's exports.handler(event).
+// 2. Environment variables come through context.env, NOT process.env — Cloudflare
+//    Workers don't have Node's process global by default.
+// 3. require() doesn't work here — Workers run ES modules, so this uses import.
+// 4. The agora-token package uses Node's crypto module internally for HMAC signing.
+//    This REQUIRES the "nodejs_compat" compatibility flag to be enabled in Cloudflare
+//    Pages settings (Settings → Functions → Compatibility flags → add "nodejs_compat"),
+//    otherwise this will fail at runtime with a missing-module error. This is a real
+//    setup step on your end, not optional.
+//
+// File location matters: this file at functions/generate-agora-token.js is
+// automatically routed by Cloudflare to the URL /generate-agora-token — no extra
+// routing config needed, that's how Pages Functions work.
 
-const agoraToken = require("agora-token");
+import { RtcTokenBuilder, RtcRole } from "agora-token";
 
-const APP_ID = process.env.AGORA_APP_ID;
-const APP_CERTIFICATE = process.env.AGORA_APP_CERTIFICATE;
-
-exports.handler = async (event) => {
-  const headers = {
+function corsHeaders() {
+  return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Content-Type": "application/json",
   };
+}
 
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 200, headers, body: "" };
-  }
+export async function onRequestOptions() {
+  return new Response("", { status: 200, headers: corsHeaders() });
+}
+
+export async function onRequest(context) {
+  const { request, env } = context;
+  const headers = corsHeaders();
+
+  const APP_ID = env.AGORA_APP_ID;
+  const APP_CERTIFICATE = env.AGORA_APP_CERTIFICATE;
 
   if (!APP_ID || !APP_CERTIFICATE) {
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: "Server is missing AGORA_APP_ID or AGORA_APP_CERTIFICATE environment variables." }),
-    };
+    return new Response(
+      JSON.stringify({ error: "Server is missing AGORA_APP_ID or AGORA_APP_CERTIFICATE environment variables." }),
+      { status: 500, headers }
+    );
   }
 
   try {
-    const params = event.httpMethod === "GET"
-      ? event.queryStringParameters || {}
-      : JSON.parse(event.body || "{}");
-
-    const channelName = params.channel;
-    const uid = params.uid != null ? String(params.uid) : "0";
+    let channelName, uid;
+    if (request.method === "GET") {
+      const url = new URL(request.url);
+      channelName = url.searchParams.get("channel");
+      uid = url.searchParams.get("uid");
+    } else {
+      const body = await request.json().catch(() => ({}));
+      channelName = body.channel;
+      uid = body.uid;
+    }
+    uid = uid != null ? String(uid) : "0";
 
     if (!channelName) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: "Missing 'channel' parameter." }) };
+      return new Response(JSON.stringify({ error: "Missing 'channel' parameter." }), { status: 400, headers });
     }
 
-    const expireSeconds = 3600; // token valid for 1 hour — plenty for any single call session
+    const expireSeconds = 3600;
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpireTs = currentTimestamp + expireSeconds;
 
-    // Figure out which shape this installed version of agora-token actually has.
-    const RtcTokenBuilder = agoraToken.RtcTokenBuilder || agoraToken.default?.RtcTokenBuilder;
-    const RtcRole = agoraToken.RtcRole || agoraToken.default?.RtcRole || { PUBLISHER: 1 };
-
     if (!RtcTokenBuilder) {
-      throw new Error("agora-token package did not export RtcTokenBuilder — package may not be installed correctly.");
+      throw new Error("agora-token package did not export RtcTokenBuilder.");
     }
 
     let token;
     if (typeof RtcTokenBuilder.buildTokenWithAccount === "function") {
-      // Newer versions: string-based user account
       token = RtcTokenBuilder.buildTokenWithAccount(
         APP_ID, APP_CERTIFICATE, channelName, uid,
         RtcRole.PUBLISHER, privilegeExpireTs, privilegeExpireTs
       );
     } else if (typeof RtcTokenBuilder.buildTokenWithUserAccount === "function") {
-      // Some versions use this name instead
       token = RtcTokenBuilder.buildTokenWithUserAccount(
         APP_ID, APP_CERTIFICATE, channelName, uid,
         RtcRole.PUBLISHER, privilegeExpireTs, privilegeExpireTs
       );
     } else if (typeof RtcTokenBuilder.buildTokenWithUid === "function") {
-      // Older/alternate versions: numeric uid only — hash the string uid down to a number
       let numericUid = 0;
       for (let i = 0; i < uid.length; i++) {
         numericUid = (numericUid * 31 + uid.charCodeAt(i)) % 2147483647;
@@ -81,16 +93,14 @@ exports.handler = async (event) => {
       );
     } else {
       const available = Object.getOwnPropertyNames(RtcTokenBuilder).filter(n => typeof RtcTokenBuilder[n] === "function");
-      throw new Error("No recognized token-building method found on RtcTokenBuilder. Available methods: " + available.join(", "));
+      throw new Error("No recognized token-building method found. Available: " + available.join(", "));
     }
 
-    return {
-      statusCode: 200,
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ token, appId: APP_ID, channel: channelName, uid, expiresAt: privilegeExpireTs }),
-    };
+    return new Response(
+      JSON.stringify({ token, appId: APP_ID, channel: channelName, uid, expiresAt: privilegeExpireTs }),
+      { status: 200, headers }
+    );
   } catch (err) {
-    console.error("Token generation error:", err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: "Failed to generate token: " + err.message }) };
+    return new Response(JSON.stringify({ error: "Failed to generate token: " + err.message }), { status: 500, headers });
   }
-};
+}
