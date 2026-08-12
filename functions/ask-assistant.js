@@ -1,7 +1,5 @@
-// CLOUDFLARE PAGES FUNCTION — converted from netlify/functions/ask-assistant.js
-// Same real conversion notes as generate-agora-token.js apply: ES module exports,
-// context.env instead of process.env, native fetch() (which Workers support natively,
-// no import needed — that part is actually simpler than Netlify's Node environment).
+// CLOUDFLARE PAGES FUNCTION — ask-assistant
+// Deployed at /.netlify/functions/ask-assistant via Pages Functions routing
 
 function corsHeaders() {
   return {
@@ -64,6 +62,7 @@ export async function onRequestPost(context) {
 
     if (!res.ok) {
       const errText = await res.text();
+      console.error("Groq API error:", res.status, errText);
       return new Response(JSON.stringify({ error: "AI service returned an error (" + res.status + ")." }), { status: 502, headers });
     }
 
@@ -72,6 +71,7 @@ export async function onRequestPost(context) {
 
     return new Response(JSON.stringify({ reply }), { status: 200, headers });
   } catch (err) {
+    console.error("Error in ask-assistant:", err.message);
     return new Response(JSON.stringify({ error: "Failed to get a response: " + err.message }), { status: 500, headers });
   }
 }
