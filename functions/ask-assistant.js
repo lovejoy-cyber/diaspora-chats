@@ -1,5 +1,4 @@
-// CLOUDFLARE PAGES FUNCTION — ask-assistant
-// Deployed at /.netlify/functions/ask-assistant via Pages Functions routing
+// CLOUDFLARE PAGES FUNCTION — AI assistant, powered by Groq.
 
 function corsHeaders() {
   return {
@@ -10,13 +9,16 @@ function corsHeaders() {
   };
 }
 
-export async function onRequestOptions() {
-  return new Response("", { status: 200, headers: corsHeaders() });
-}
-
-export async function onRequestPost(context) {
+export async function onRequest(context) {
   const { request, env } = context;
   const headers = corsHeaders();
+
+  if (request.method === "OPTIONS") {
+    return new Response("", { status: 200, headers });
+  }
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed. Use POST." }), { status: 405, headers });
+  }
 
   const GROQ_API_KEY = env.GROQ_API_KEY;
   if (!GROQ_API_KEY) {
@@ -61,8 +63,6 @@ export async function onRequestPost(context) {
     });
 
     if (!res.ok) {
-      const errText = await res.text();
-      console.error("Groq API error:", res.status, errText);
       return new Response(JSON.stringify({ error: "AI service returned an error (" + res.status + ")." }), { status: 502, headers });
     }
 
@@ -71,7 +71,6 @@ export async function onRequestPost(context) {
 
     return new Response(JSON.stringify({ reply }), { status: 200, headers });
   } catch (err) {
-    console.error("Error in ask-assistant:", err.message);
     return new Response(JSON.stringify({ error: "Failed to get a response: " + err.message }), { status: 500, headers });
   }
 }

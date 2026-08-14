@@ -1,13 +1,6 @@
-// CLOUDFLARE PAGES FUNCTION — Agora RTC token generator using the real, official
-// "agora-token" npm package (proven-correct implementation, not hand-rolled crypto).
-//
-// The build failure ("Could not resolve crypto/zlib") is a bundler configuration
-// issue, not a runtime incompatibility — Cloudflare Workers DO support Node's crypto
-// module at runtime when nodejs_compat is enabled; the problem is specifically that
-// esbuild (Cloudflare's build-time bundler) doesn't know to treat "crypto" and "zlib"
-// as Cloudflare-provided built-ins unless told to via wrangler.toml's build config.
-// See wrangler.toml at the project root for that fix — this file itself is unchanged
-// from the standard, correct implementation.
+// CLOUDFLARE PAGES FUNCTION — Agora RTC token generator.
+// Rebuilt fresh. Uses the real "agora-token" npm package (proven-correct
+// implementation — not hand-rolled crypto, learned that lesson).
 
 import { RtcTokenBuilder, RtcRole } from "agora-token";
 
@@ -59,10 +52,6 @@ export async function onRequest(context) {
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpireTs = currentTimestamp + expireSeconds;
 
-    if (!RtcTokenBuilder) {
-      throw new Error("agora-token package did not export RtcTokenBuilder.");
-    }
-
     let token;
     if (typeof RtcTokenBuilder.buildTokenWithAccount === "function") {
       token = RtcTokenBuilder.buildTokenWithAccount(
@@ -74,18 +63,8 @@ export async function onRequest(context) {
         APP_ID, APP_CERTIFICATE, channelName, uid,
         RtcRole.PUBLISHER, privilegeExpireTs, privilegeExpireTs
       );
-    } else if (typeof RtcTokenBuilder.buildTokenWithUid === "function") {
-      let numericUid = 0;
-      for (let i = 0; i < uid.length; i++) {
-        numericUid = (numericUid * 31 + uid.charCodeAt(i)) % 2147483647;
-      }
-      token = RtcTokenBuilder.buildTokenWithUid(
-        APP_ID, APP_CERTIFICATE, channelName, numericUid,
-        RtcRole.PUBLISHER, privilegeExpireTs, privilegeExpireTs
-      );
     } else {
-      const available = Object.getOwnPropertyNames(RtcTokenBuilder).filter(n => typeof RtcTokenBuilder[n] === "function");
-      throw new Error("No recognized token-building method found. Available: " + available.join(", "));
+      throw new Error("agora-token package does not expose a recognized token-building method.");
     }
 
     return new Response(
