@@ -10,8 +10,10 @@ name = "diasporalink-fetch-reels"
 main = "src/index.js"
 compatibility_date = "2024-09-01"
 
-# Runs every 2 hours — same safe frequency as the Netlify version, calculated against
-# YouTube's real 10,000 units/day free quota (7 categories x ~100 units = ~700/run,
-# 12 runs/day = ~8,400/day, safely under the limit).
+# Runs every 3 hours — recalculated after adding 2 new categories (9 total now, up
+# from 7). At 9 categories x ~100 units = ~900 units/run, every 2 hours would be
+# 12 runs/day = 10,800 units/day, which EXCEEDS the 10,000/day free quota — caught
+# this before shipping it. Every 3 hours = 8 runs/day = 7,200 units/day, safely
+# within budget with real margin to spare.
 [triggers]
-crons = ["0 */2 * * *"]
+crons = ["0 */3 * * *"]

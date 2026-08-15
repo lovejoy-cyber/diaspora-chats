@@ -4,6 +4,7 @@ import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { timeAgo } from "../lib/helpers";
+import { playNotificationSound } from "../lib/sounds";
 
 const CSS = `
 .nb-wrap{position:relative}
@@ -47,6 +48,9 @@ export default function NotificationBell() {
   // Watch conversations for unread message counts so the bell reacts to new DMs too —
   // also keeps the actual conversation list so notifications can be clicked straight
   // through to the right chat, not just show a number.
+  const prevMsgUnreadRef = useRef(null);
+  const prevNotifCountRef = useRef(null);
+
   useEffect(() => {
     if (!currentUser) return;
     const q = query(collection(db, "conversations"), where("participants", "array-contains", currentUser.uid));
@@ -71,6 +75,13 @@ export default function NotificationBell() {
         }
       });
       convos.sort((a, b) => (b.lastMessageAt?.toDate?.()?.getTime?.() || 0) - (a.lastMessageAt?.toDate?.()?.getTime?.() || 0));
+      // Only play a sound when the count genuinely goes UP from a known previous value —
+      // this avoids a false "ding" on first load (when prev is null) and avoids playing
+      // when messages are marked read and the count drops.
+      if (prevMsgUnreadRef.current !== null && total > prevMsgUnreadRef.current) {
+        playNotificationSound();
+      }
+      prevMsgUnreadRef.current = total;
       setMsgUnread(total);
       setUnreadConvos(convos);
     }, err => console.error("Bell: conversation listener failed:", err));
@@ -92,21 +103,37 @@ export default function NotificationBell() {
     // (each filtering on one field, ordering on another) don't need any special index.
     const qMine = query(collection(db, "notifications"), where("recipientId", "==", currentUser.uid), orderBy("createdAt", "desc"), limit(40));
     const qAll = query(collection(db, "notifications"), where("recipientId", "==", "ALL"), orderBy("createdAt", "desc"), limit(40));
+    // Commander-only: a third query for recipientId === "ADMIN" — this is the real fix
+    // for admin transaction alerts never actually reaching the bell. The write side
+    // (recipientId: "ADMIN") already existed for device-fingerprint flags, but nothing
+    // was ever listening for it until now.
+    const isAdmin = userProfile?.role === "admin";
+    const qAdmin = isAdmin ? query(collection(db, "notifications"), where("recipientId", "==", "ADMIN"), orderBy("createdAt", "desc"), limit(40)) : null;
 
-    let mine = [], all = [];
+    let mine = [], all = [], adminOnly = [];
     const merge = () => {
-      const combined = [...mine, ...all].sort((a, b) => {
+      const combined = [...mine, ...all, ...adminOnly].sort((a, b) => {
         const ta = a.createdAt?.toDate?.()?.getTime?.() || 0;
         const tb = b.createdAt?.toDate?.()?.getTime?.() || 0;
         return tb - ta;
       });
+      // Fixed a real bug: this was comparing the TOTAL notification count (including
+      // already-read ones), which barely ever meaningfully increases since old read
+      // items just sit in that list forever. Now compares the actual UNREAD count
+      // specifically — the number that genuinely matters for "did something new arrive."
+      const currentUnreadCount = combined.filter(n => n.recipientId === "ALL" || n.recipientId === "ADMIN" ? !readIds().includes(n.id) : !n.read).length;
+      if (prevNotifCountRef.current !== null && currentUnreadCount > prevNotifCountRef.current) {
+        playNotificationSound();
+      }
+      prevNotifCountRef.current = currentUnreadCount;
       setItems(combined);
     };
 
     const unsub1 = onSnapshot(qMine, snap => { mine = snap.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, err => console.error("Notifications (mine) query failed:", err));
     const unsub2 = onSnapshot(qAll, snap => { all = snap.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, err => console.error("Notifications (all) query failed:", err));
-    return () => { unsub1(); unsub2(); };
-  }, [currentUser]);
+    const unsub3 = qAdmin ? onSnapshot(qAdmin, snap => { adminOnly = snap.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, err => console.error("Notifications (admin) query failed:", err)) : () => {};
+    return () => { unsub1(); unsub2(); unsub3(); };
+  }, [currentUser, userProfile?.role]);
 
   useEffect(() => {
     const h = e => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
@@ -151,7 +178,7 @@ export default function NotificationBell() {
             {unread.length > 0 && <button className="nb-clear" onClick={markAll}>Mark all read</button>}
           </div>
           <div className="nb-list">
-            {items.length === 0 && unreadConvos.length === 0 && <div className="nb-empty">No notifications yet</div>}
+            {unread.length === 0 && unreadConvos.length === 0 && <div className="nb-empty">No new notifications</div>}
             {unreadConvos.map(c => (
               <div
                 key={c.id}
@@ -168,10 +195,10 @@ export default function NotificationBell() {
                 </div>
               </div>
             ))}
-            {items.map(n => (
+            {unread.map(n => (
               <div
                 key={n.id}
-                className={"nb-item" + (isRead(n) ? "" : n.urgent ? " urgent" : " unread")}
+                className={"nb-item" + (n.urgent ? " urgent" : " unread")}
                 onClick={n.link ? () => { setOpen(false); navigate(n.link); } : undefined}
                 style={n.link ? { cursor: "pointer" } : undefined}
               >

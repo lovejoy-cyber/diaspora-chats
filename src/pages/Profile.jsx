@@ -4,12 +4,13 @@ import { updatePassword, deleteUser, EmailAuthProvider, reauthenticateWithCreden
 import { useNavigate } from "react-router-dom";
 import { db, auth } from "../firebase/config";
 import { useAuth, ROLE_INFO } from "../contexts/AuthContext";
-import { uploadToCloudinary } from "../lib/helpers";
+import { uploadToCloudinary, isValidPhone } from "../lib/helpers";
+import { soundsEnabled, setSoundsEnabled } from "../lib/sounds";
 import { redeemPrivilegeCode } from "../lib/privilegeCodes";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
 import ProfileQR from "../components/ProfileQR";
-import { useTranslation } from "../lib/useTranslation";
+import { useLanguage } from "../contexts/LanguageContext";
 import { LANGUAGES } from "../lib/translations";
 
 const NATIONALITIES = ["Zimbabwean","Nigerian","Cameroonian","Congolese (DRC)","Congolese (ROC)","Ivorian","Senegalese","Malian","Burkinabe","Guinean","Ghanaian","Kenyan","Ethiopian","South African","Mozambican","Zambian","Tanzanian","Ugandan","Rwandan","Togolese","Beninese","Nigerien","Chadian","Sudanese","Libyan","Moroccan","Tunisian","Mauritanian","Algerian","Namibian","Botswanan","Angolan","Sierra Leonean","Liberian","Gambian","Malawian","Egyptian","Somali","Eritrean","Gabonese","Other"];
@@ -30,7 +31,7 @@ const PRESENCE_OPTIONS = [
 
 export default function Profile() {
   const { currentUser, userProfile, refreshProfile } = useAuth();
-  const { lang, setLang } = useTranslation();
+  const { lang, setLang } = useLanguage();
   const navigate = useNavigate();
   const [tab, setTab] = useState("profile");
   const [editing, setEditing] = useState(false);
@@ -58,6 +59,13 @@ export default function Profile() {
   const [delPw, setDelPw] = useState("");
   const [showDel, setShowDel] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState("");
+  const [soundsOn, setSoundsOn] = useState(soundsEnabled());
+
+  const toggleSounds = () => {
+    const next = !soundsOn;
+    setSoundsEnabled(next);
+    setSoundsOn(next);
+  };
 
   const updatePresence = async (value) => {
     await setDoc(doc(db, "users", currentUser.uid), { presence: value }, { merge: true });
@@ -106,6 +114,10 @@ export default function Profile() {
   const save = async (e) => {
     e.preventDefault();
     if (!form.fullName.trim()) { setErr("Full name is required."); return; }
+    if (form.phone.trim() && !isValidPhone(form.phone)) {
+      setErr("Please enter your phone number with a country code, e.g. +213 555 123 456.");
+      return;
+    }
     setSaving(true); setErr(""); setOk("");
     try {
       let photoURL = userProfile?.photoURL || "";
@@ -356,6 +368,31 @@ export default function Profile() {
               >
                 <span style={{
                   position: "absolute", top: 3, left: userProfile?.readReceiptsEnabled !== false ? 23 : 3,
+                  width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left .2s"
+                }} />
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">🔔 Sounds</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0" }}>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>Notification Sounds</div>
+                <div style={{ fontSize: 11.5, color: "var(--text2)", marginTop: 2, maxWidth: 260 }}>
+                  Play a sound when a new message or notification arrives, and when the app opens.
+                </div>
+              </div>
+              <button
+                onClick={toggleSounds}
+                style={{
+                  width: 46, height: 26, borderRadius: 20, border: "none", cursor: "pointer", flexShrink: 0,
+                  background: soundsOn ? "var(--primary)" : "var(--border2)",
+                  position: "relative", transition: "background .2s"
+                }}
+              >
+                <span style={{
+                  position: "absolute", top: 3, left: soundsOn ? 23 : 3,
                   width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left .2s"
                 }} />
               </button>

@@ -4,12 +4,14 @@ import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/aut
 import { auth } from "../firebase/config";
 import ReactiveAvatar from "../components/ReactiveAvatar";
 import { useSpotlight } from "../lib/useSpotlight";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const MAX = 6;
 const LOCK = 5 * 60 * 1000;
 
 export default function Login() {
   const spot = useSpotlight();
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
@@ -71,8 +73,8 @@ export default function Login() {
           <h1>DiasporaLink</h1>
           <p>Global Community Platform</p>
         </div>
-        <h2 className="auth-title">Welcome back</h2>
-        <p className="auth-subtitle">Sign in to your account</p>
+        <h2 className="auth-title">{t("welcomeBack")}</h2>
+        <p className="auth-subtitle">{t("signInToAccount")}</p>
 
         {err && <div className="error-msg">⚠️ {err}{locked ? " (" + count + "s)" : ""}</div>}
         {ok && <div className="success-msg">✅ {ok}</div>}
@@ -81,24 +83,24 @@ export default function Login() {
 
         <form onSubmit={submit}>
           <div className="form-group">
-            <label className="form-label">Email Address</label>
+            <label className="form-label">{t("email")}</label>
             <input type="email" className="form-input" placeholder="you@email.com" value={email}
               onChange={e => setEmail(e.target.value)} onFocus={() => setFocusedField("email")} onBlur={() => setFocusedField("none")} required autoComplete="email" disabled={locked} />
           </div>
           <div className="form-group">
-            <label className="form-label">Password</label>
+            <label className="form-label">{t("password")}</label>
             <input type="password" className="form-input" placeholder="Your password" value={pw}
               onChange={e => setPw(e.target.value)} onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField("none")} required autoComplete="current-password" disabled={locked} />
           </div>
           <button type="submit" className="btn-primary" disabled={loading || locked}>
-            {locked ? "Locked (" + count + "s)" : loading ? "Signing in…" : "Sign In"}
+            {locked ? "Locked (" + count + "s)" : loading ? "Signing in…" : t("signIn")}
           </button>
         </form>
 
         <div style={{ textAlign: "center", marginTop: 12 }}>
-          <button className="btn-ghost" onClick={forgot} type="button">Forgot your password?</button>
+          <button className="btn-ghost" onClick={forgot} type="button">{t("forgotPassword")}</button>
         </div>
-        <div className="auth-link">New here? <Link to="/register">Create an account</Link></div>
+        <div className="auth-link">{t("newHere")} <Link to="/register">{t("createAccount")}</Link></div>
         <div style={{ marginTop: 18, padding: "11px 14px", background: "rgba(6,182,212,.05)", border: "1px solid rgba(6,182,212,.14)", borderRadius: 12, fontSize: 12, color: "var(--text2)", textAlign: "center", lineHeight: 1.65 }}>
           🔒 Accounts are reviewed by embassy administrators. Your details stay visible only to verified members.
         </div>

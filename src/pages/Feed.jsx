@@ -72,6 +72,7 @@ export default function Feed() {
   const [posts, setPosts] = useState([]);
   const [text, setText] = useState("");
   const [img, setImg] = useState(null);
+  const [videoF, setVideoF] = useState(null);
   const [prev, setPrev] = useState("");
   const [docF, setDocF] = useState(null);
   const [posting, setPosting] = useState(false);
@@ -90,6 +91,7 @@ export default function Feed() {
     setTimeout(() => setBurstId(null), 700);
   };
   const imgRef = useRef(null);
+  const videoRef = useRef(null);
   const docRef2 = useRef(null);
 
   useEffect(() => {
@@ -106,15 +108,16 @@ export default function Feed() {
   }, []);
 
   const submit = async () => {
-    if (!text.trim() && !img && !docF) return;
+    if (!text.trim() && !img && !videoF && !docF) return;
     if (containsProfanity(text)) { alert("Your post contains language that is not allowed."); return; }
     setPosting(true);
     try {
-      let imageUrl = null, docUrl = null, docName = null;
+      let imageUrl = null, videoUrl = null, docUrl = null, docName = null;
       if (img) imageUrl = await uploadToCloudinary(img, "image");
+      if (videoF) videoUrl = await uploadToCloudinary(videoF, "video");
       if (docF) { docUrl = await uploadToCloudinary(docF, "raw"); docName = docF.name; }
       await addDoc(collection(db, "posts"), {
-        text: cleanText(text.trim()), imageUrl, docUrl, docName,
+        text: cleanText(text.trim()), imageUrl, videoUrl, docUrl, docName,
         urgent: urgent && isStaff,
         authorId: currentUser.uid, authorName: userProfile.fullName,
         authorPhoto: userProfile.photoURL || "", authorRole: userProfile.role || "student",
@@ -141,7 +144,7 @@ export default function Feed() {
           read: false, createdAt: serverTimestamp(),
         }).catch(() => {});
       }
-      setText(""); setImg(null); setPrev(""); setDocF(null); setUrgent(false);
+      setText(""); setImg(null); setVideoF(null); setPrev(""); setDocF(null); setUrgent(false);
     } catch { alert("Post failed. Please try again."); }
     setPosting(false);
   };
@@ -215,8 +218,8 @@ export default function Feed() {
         </div>
         {prev && (
           <div className="fd-prev">
-            <img src={prev} alt="" />
-            <button onClick={() => { setImg(null); setPrev(""); }}>✕</button>
+            {videoF ? <video src={prev} controls style={{ width: "100%", maxHeight: 300, borderRadius: 10 }} /> : <img src={prev} alt="" />}
+            <button onClick={() => { setImg(null); setVideoF(null); setPrev(""); }}>✕</button>
           </div>
         )}
         {docF && (
@@ -227,16 +230,19 @@ export default function Feed() {
         )}
         <div className="fd-acts">
           <button className="fd-btn" onClick={() => imgRef.current?.click()}>📷 Photo</button>
+          <button className="fd-btn" onClick={() => videoRef.current?.click()}>🎬 Video</button>
           <button className="fd-btn" onClick={() => docRef2.current?.click()}>📄 Document</button>
           {isStaff && (
             <button className="fd-btn" style={urgent ? { background: "rgba(239,68,68,.15)", borderColor: "#ef4444", color: "#fca5a5" } : {}}
               onClick={() => setUrgent(!urgent)}>🚨 Urgent</button>
           )}
           <input ref={imgRef} type="file" accept="image/*" style={{ display: "none" }}
-            onChange={e => { const f = e.target.files[0]; if (f) { setImg(f); setPrev(URL.createObjectURL(f)); } e.target.value = ""; }} />
+            onChange={e => { const f = e.target.files[0]; if (f) { setImg(f); setVideoF(null); setPrev(URL.createObjectURL(f)); } e.target.value = ""; }} />
+          <input ref={videoRef} type="file" accept="video/*" style={{ display: "none" }}
+            onChange={e => { const f = e.target.files[0]; if (f) { setVideoF(f); setImg(null); setPrev(URL.createObjectURL(f)); } e.target.value = ""; }} />
           <input ref={docRef2} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" style={{ display: "none" }}
             onChange={e => { setDocF(e.target.files[0] || null); e.target.value = ""; }} />
-          <button className="fd-post" onClick={submit} disabled={posting || (!text.trim() && !img && !docF)}>
+          <button className="fd-post" onClick={submit} disabled={posting || (!text.trim() && !img && !videoF && !docF)}>
             {posting ? "Posting..." : "Post ✈️"}
           </button>
         </div>
@@ -282,6 +288,12 @@ export default function Feed() {
           {p.imageUrl && (
             <div style={{ position: "relative" }} onDoubleClick={() => { if (!p.likes?.includes(currentUser.uid)) like(p); triggerHeartBurst(p.id); }}>
               <img src={p.imageUrl} alt="" className="fd-img" onClick={() => setLightboxSrc(p.imageUrl)} />
+              {burstId === p.id && <span className="fd-heart-burst">❤️</span>}
+            </div>
+          )}
+          {p.videoUrl && (
+            <div style={{ position: "relative" }} onDoubleClick={() => { if (!p.likes?.includes(currentUser.uid)) like(p); triggerHeartBurst(p.id); }}>
+              <video src={p.videoUrl} controls playsInline style={{ width: "100%", maxHeight: 420, display: "block", background: "#000" }} />
               {burstId === p.id && <span className="fd-heart-burst">❤️</span>}
             </div>
           )}

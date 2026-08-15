@@ -4,6 +4,7 @@ import { db } from "../firebase/config";
 import { useAuth, ROLE_INFO, ROLE_LEVELS } from "../contexts/AuthContext";
 import { timeAgo, isUserOnline } from "../lib/helpers";
 import { issuePrivilegeCode } from "../lib/privilegeCodes";
+import { COUNTRY_ROOMS, INTEREST_ROOMS } from "../lib/rooms";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
 import UserProfileModal from "../components/UserProfileModal";
@@ -38,6 +39,17 @@ const CSS = `
 .ad-bar-v{font-size:11px;font-weight:800}
 `;
 
+// Same combined room list Rooms.jsx builds — reused here for the "target a specific
+// room" option in Push Notifications, so the picker shows every real room, not a
+// separate hand-maintained list that could drift out of sync.
+const ALL_ROOMS = [
+  ...INTEREST_ROOMS.map(r => ({ id: r.id, name: r.name })),
+  ...COUNTRY_ROOMS.map(r => ({
+    id: r.country.toLowerCase().replace(/[^a-z]/g, "_"),
+    name: r.flag + " " + r.name,
+  })),
+];
+
 export default function Admin() {
   const { currentUser, userProfile, isAdmin, isStaff, level } = useAuth();
   const [tab, setTab] = useState("overview");
@@ -49,6 +61,14 @@ export default function Admin() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [nTitle, setNTitle] = useState("");
+  const [pushTarget, setPushTarget] = useState("everyone"); // "everyone" | "person" | "room"
+  const [pushUserId, setPushUserId] = useState("");
+  const [pushRoomId, setPushRoomId] = useState("");
+  const [pushTitle, setPushTitle] = useState("");
+  const [pushBody, setPushBody] = useState("");
+  const [pushSending, setPushSending] = useState(false);
+  const [pushSent, setPushSent] = useState("");
+  const [pushUserSearch, setPushUserSearch] = useState("");
   const [nBody, setNBody] = useState("");
   const [nUrgent, setNUrgent] = useState(false);
   const [sending, setSending] = useState(false);
@@ -177,6 +197,47 @@ export default function Admin() {
     setNTitle(""); setNBody(""); setNUrgent(false); setSending(false);
   };
 
+  // Real, targeted push notification — the actual "send to one person, one room, or
+  // everyone, right now" tool. Distinct from Broadcast above, which always goes to
+  // everyone AND creates a Feed post — this is a pure notification, no post, sendable
+  // to exactly who you choose. For a room target, since rooms are open-join with no
+  // fixed member list, this notifies everyone but clearly labels which room it's about
+  // and links straight there — the honest, correct behavior given how rooms actually work.
+  const sendPush = async (e) => {
+    e.preventDefault();
+    if (!pushTitle.trim() || !pushBody.trim()) return;
+    if (pushTarget === "person" && !pushUserId) return;
+    if (pushTarget === "room" && !pushRoomId) return;
+    setPushSending(true);
+    try {
+      if (pushTarget === "person") {
+        await addDoc(collection(db, "notifications"), {
+          recipientId: pushUserId, urgent: false, icon: "🔔",
+          title: pushTitle.trim(), message: pushBody.trim(), link: "/dashboard",
+          postedBy: userProfile.fullName, read: false, createdAt: serverTimestamp(),
+        });
+      } else if (pushTarget === "room") {
+        const room = ALL_ROOMS.find(r => r.id === pushRoomId);
+        await addDoc(collection(db, "notifications"), {
+          recipientId: "ALL", urgent: false, icon: "🌍",
+          title: (room ? room.name + " — " : "") + pushTitle.trim(),
+          message: pushBody.trim(), link: "/dashboard/rooms",
+          postedBy: userProfile.fullName, read: false, createdAt: serverTimestamp(),
+        });
+      } else {
+        await addDoc(collection(db, "notifications"), {
+          recipientId: "ALL", urgent: false, icon: "🔔",
+          title: pushTitle.trim(), message: pushBody.trim(), link: "/dashboard",
+          postedBy: userProfile.fullName, read: false, createdAt: serverTimestamp(),
+        });
+      }
+      setPushSent("Sent!");
+      setPushTitle(""); setPushBody(""); setPushUserId(""); setPushRoomId(""); setPushUserSearch("");
+      setTimeout(() => setPushSent(""), 2500);
+    } catch (e) { alert("Could not send. Please try again."); }
+    setPushSending(false);
+  };
+
   const exportCSV = () => {
     const head = ["Full Name","Email","Phone","Nationality","City","University","Gender","Role","Verified","Suspended","Joined"];
     const rows = users.map(u => [
@@ -252,6 +313,7 @@ export default function Admin() {
     { k: "reports", l: "🚩 Reports" + (openReports ? " (" + openReports + ")" : "") },
     { k: "content", l: "📝 Content" },
     { k: "broadcast", l: "📢 Broadcast" },
+    { k: "push", l: "🔔 Push" },
     { k: "privileges", l: "🔑 Privileges" },
   ];
 
@@ -464,6 +526,83 @@ export default function Admin() {
               </div>
             ))}
             {notices.filter(n => n.recipientId === "ALL").length === 0 && <p style={{ color: "var(--text2)", fontSize: 13.5 }}>No announcements sent yet.</p>}
+          </div>
+        </>
+      )}
+
+      {tab === "push" && (
+        <>
+          <div className="card">
+            <div className="card-title">🔔 Send Push Notification</div>
+            <p style={{ fontSize: 12.5, color: "var(--text2)", marginBottom: 16, lineHeight: 1.6 }}>
+              A real, targeted notification — sent directly to one person, tagged for one room, or everyone.
+              Unlike Broadcast, this doesn't create a Feed post — it's a pure notification.
+            </p>
+            <form onSubmit={sendPush}>
+              <div className="form-group">
+                <label className="form-label">Send To</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[{ v: "everyone", l: "🌍 Everyone" }, { v: "person", l: "👤 One Person" }, { v: "room", l: "🏘️ A Room" }].map(opt => (
+                    <button
+                      key={opt.v} type="button"
+                      onClick={() => setPushTarget(opt.v)}
+                      style={{
+                        flex: 1, padding: "9px 6px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                        border: "2px solid " + (pushTarget === opt.v ? "var(--primary)" : "var(--border)"),
+                        background: pushTarget === opt.v ? "rgba(59,130,246,.1)" : "transparent",
+                        color: pushTarget === opt.v ? "var(--primary-light)" : "var(--text2)",
+                      }}
+                    >
+                      {opt.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {pushTarget === "person" && (
+                <div className="form-group">
+                  <label className="form-label">Search Member</label>
+                  <input className="form-input" placeholder="Type a name..." value={pushUserSearch} onChange={e => setPushUserSearch(e.target.value)} />
+                  {pushUserSearch.trim() && (
+                    <div style={{ maxHeight: 160, overflowY: "auto", marginTop: 8, border: "1px solid var(--border)", borderRadius: 9 }}>
+                      {users.filter(u => u.fullName?.toLowerCase().includes(pushUserSearch.toLowerCase())).slice(0, 8).map(u => (
+                        <div
+                          key={u.uid}
+                          onClick={() => { setPushUserId(u.uid); setPushUserSearch(u.fullName); }}
+                          style={{ padding: "9px 12px", cursor: "pointer", fontSize: 13, background: pushUserId === u.uid ? "rgba(59,130,246,.12)" : "transparent", borderBottom: "1px solid var(--border)" }}
+                        >
+                          {u.fullName}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {pushUserId && <div style={{ fontSize: 11.5, color: "#34d399", marginTop: 6 }}>✓ Selected</div>}
+                </div>
+              )}
+
+              {pushTarget === "room" && (
+                <div className="form-group">
+                  <label className="form-label">Room</label>
+                  <select className="form-input" value={pushRoomId} onChange={e => setPushRoomId(e.target.value)}>
+                    <option value="">Select a room...</option>
+                    {ALL_ROOMS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label">Title</label>
+                <input className="form-input" placeholder='e.g. "Document ready"' value={pushTitle} onChange={e => setPushTitle(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Message</label>
+                <textarea className="form-input" rows={3} value={pushBody} onChange={e => setPushBody(e.target.value)} />
+              </div>
+              {pushSent && <div className="success-msg">✅ {pushSent}</div>}
+              <button type="submit" className="btn-primary" disabled={pushSending || !pushTitle.trim() || !pushBody.trim()}>
+                {pushSending ? "Sending..." : "🔔 Send Notification"}
+              </button>
+            </form>
           </div>
         </>
       )}

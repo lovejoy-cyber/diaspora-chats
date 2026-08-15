@@ -1,6 +1,7 @@
 # Cloudflare Pages configuration — read at build time to tell the Functions bundler
 # that "crypto" and "zlib" (needed by the agora-token package) are Cloudflare-provided
 # Node built-ins, not packages that need to be bundled from scratch.
+
 name = "diaspora-chats"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]

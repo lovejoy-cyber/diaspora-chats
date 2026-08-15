@@ -14,6 +14,10 @@ import Avatar from "../components/Avatar";
 
 const CSS = `
 .rl-page{height:100%;overflow-y:scroll;scroll-snap-type:y mandatory;background:#000;}
+.rl-filter-bar{position:sticky;top:0;left:0;right:0;z-index:15;display:flex;gap:6px;overflow-x:auto;padding:8px 12px;background:linear-gradient(to bottom,rgba(0,0,0,.85),rgba(0,0,0,.3));pointer-events:none;}
+.rl-filter-bar>*{pointer-events:auto;}
+.rl-filter-chip{flex-shrink:0;padding:6px 13px;border-radius:20px;font-size:11.5px;font-weight:650;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.18);cursor:pointer;white-space:nowrap;backdrop-filter:blur(4px);transition:all .15s;}
+.rl-filter-chip.on{background:var(--primary);border-color:var(--primary);}
 .rl-slide{height:100%;min-height:100%;scroll-snap-align:start;position:relative;display:flex;align-items:center;justify-content:center;background:#000;}
 .rl-media-wrap{width:100%;height:100%;max-width:480px;position:relative;}
 .rl-media-wrap iframe{width:100%;height:100%;border:none;}
@@ -34,6 +38,7 @@ const CSS = `
 const CATEGORY_LABELS = {
   scholarships: "🎓 Scholarships", jobs: "💼 Jobs", tech: "💻 Tech", courses: "📚 Courses",
   news: "📰 News", life: "🌍 Life", faith: "✝️ Faith", manual: "🔗 Community Shared",
+  trending: "🔥 Trending", jokes: "😂 Jokes",
 };
 
 function detectEmbedUrl(link) {
@@ -60,10 +65,19 @@ export default function Reels() {
   const { currentUser, userProfile } = useAuth();
   const isStaff = ["embassy", "admin", "president"].includes(userProfile?.role);
   const [reels, setReels] = useState([]);
+  const [activeCategory, setActiveCategory] = useState("all");
   const [showAdd, setShowAdd] = useState(false);
   const [linkInput, setLinkInput] = useState("");
   const [titleInput, setTitleInput] = useState("");
   const [posting, setPosting] = useState(false);
+  // Tracks which single reel is actually visible/scrolled-to right now — only that one
+  // gets a live, playing embed. This is the real fix for "videos play together instead
+  // of stopping the previous one" — every reel WAS rendering a live YouTube iframe
+  // simultaneously regardless of scroll position. Only the active slide's video element
+  // exists in the DOM at all now; scrolling away unmounts it, which stops playback.
+  const [activeReelId, setActiveReelId] = useState(null);
+  const slideRefs = useRef({});
+  const observerRef = useRef(null);
 
   useEffect(() => {
     if (!document.getElementById("rl-css")) {
@@ -102,10 +116,49 @@ export default function Reels() {
     await updateDoc(doc(db, "reels", id), { hidden: true });
   };
 
-  const filtered = reels;
+  const filtered = activeCategory === "all" ? reels : reels.filter(r => r.category === activeCategory);
+  const availableCategories = ["all", ...new Set(reels.map(r => r.category).filter(Boolean))];
+
+  // Sets up ONE IntersectionObserver watching all rendered slides — whichever one is
+  // most visible in the viewport (i.e. the one the user has scrolled to) becomes the
+  // active reel. Re-runs whenever the list of reels changes, since new slide elements
+  // need to be observed too.
+  useEffect(() => {
+    if (observerRef.current) observerRef.current.disconnect();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Find the entry with the highest intersection ratio — the slide most fully
+        // in view — and make that the active (playing) one.
+        let best = null;
+        entries.forEach(entry => {
+          if (entry.isIntersecting && (!best || entry.intersectionRatio > best.intersectionRatio)) {
+            best = entry;
+          }
+        });
+        if (best) {
+          const id = best.target.getAttribute("data-reel-id");
+          setActiveReelId(id);
+        }
+      },
+      { threshold: [0.6] } // a slide must be at least 60% visible to be considered "active"
+    );
+    Object.values(slideRefs.current).forEach(el => { if (el) observer.observe(el); });
+    observerRef.current = observer;
+    return () => observer.disconnect();
+  }, [filtered.length]);
 
   return (
     <div className="rl-page">
+      {availableCategories.length > 1 && (
+        <div className="rl-filter-bar">
+          {availableCategories.map(c => (
+            <div key={c} className={"rl-filter-chip" + (activeCategory === c ? " on" : "")} onClick={() => setActiveCategory(c)}>
+              {c === "all" ? "🌍 All" : CATEGORY_LABELS[c] || c}
+            </div>
+          ))}
+        </div>
+      )}
+
       {filtered.length === 0 && (
         <div className="rl-empty">
           <div style={{ fontSize: 42 }}>🎬</div>
@@ -114,39 +167,56 @@ export default function Reels() {
         </div>
       )}
 
-      {filtered.map(r => (
-        <div key={r.id} className="rl-slide">
-          <div className="rl-media-wrap">
-            {r.source === "youtube" && (
-              <iframe src={"https://www.youtube.com/embed/" + r.videoId} title={r.title} allow="autoplay; encrypted-media" allowFullScreen />
-            )}
-            {r.source === "youtube" && r.embedUrl && !r.videoId && (
-              <iframe src={r.embedUrl} title={r.title} allow="autoplay; encrypted-media" allowFullScreen />
-            )}
-            {r.source === "tiktok" && (
-              <blockquote className="tiktok-embed" cite={r.rawLink} data-video-id={r.embedVideoId} style={{ maxWidth: "100%", minWidth: "100%" }}>
-                <a href={r.rawLink} target="_blank" rel="noreferrer">View on TikTok</a>
-              </blockquote>
-            )}
-            {r.source === "link" && (
-              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", padding: 30, textAlign: "center" }}>
-                <a href={r.rawLink} target="_blank" rel="noreferrer" style={{ color: "#60A5FA" }}>Open shared link ↗</a>
+      {filtered.map(r => {
+        const isActive = activeReelId === r.id;
+        return (
+          <div key={r.id} className="rl-slide" ref={el => { slideRefs.current[r.id] = el; }} data-reel-id={r.id}>
+            <div className="rl-media-wrap">
+              {isActive ? (
+                <>
+                  {r.source === "youtube" && (
+                    <iframe src={"https://www.youtube.com/embed/" + r.videoId + "?autoplay=1"} title={r.title} allow="autoplay; encrypted-media" allowFullScreen />
+                  )}
+                  {r.source === "youtube" && r.embedUrl && !r.videoId && (
+                    <iframe src={r.embedUrl.replace("autoplay=0", "autoplay=1")} title={r.title} allow="autoplay; encrypted-media" allowFullScreen />
+                  )}
+                  {r.source === "tiktok" && (
+                    <blockquote className="tiktok-embed" cite={r.rawLink} data-video-id={r.embedVideoId} style={{ maxWidth: "100%", minWidth: "100%" }}>
+                      <a href={r.rawLink} target="_blank" rel="noreferrer">View on TikTok</a>
+                    </blockquote>
+                  )}
+                  {r.source === "link" && (
+                    <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", padding: 30, textAlign: "center" }}>
+                      <a href={r.rawLink} target="_blank" rel="noreferrer" style={{ color: "#60A5FA" }}>Open shared link ↗</a>
+                    </div>
+                  )}
+                </>
+              ) : (
+                // Inactive slide — no live video, just a static thumbnail so scrolling
+                // past feels smooth rather than showing a blank black box. Tapping it
+                // still lets the person jump straight to it via native scroll snap.
+                <div style={{ width: "100%", height: "100%", position: "relative", background: "#111" }}>
+                  {r.thumbnail && (
+                    <img src={r.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: .6 }} />
+                  )}
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, opacity: .8 }}>▶</div>
+                </div>
+              )}
+
+              <span className="rl-source-badge">{r.source === "youtube" ? "▶ YouTube" : r.source === "tiktok" ? "TikTok" : "Link"}</span>
+
+              <div className="rl-overlay">
+                <div className="rl-title">{r.title}</div>
+                <div className="rl-channel">{r.channelTitle}</div>
               </div>
-            )}
 
-            <span className="rl-source-badge">{r.source === "youtube" ? "▶ YouTube" : r.source === "tiktok" ? "TikTok" : "Link"}</span>
-
-            <div className="rl-overlay">
-              <div className="rl-title">{r.title}</div>
-              <div className="rl-channel">{r.channelTitle}</div>
-            </div>
-
-            <div className="rl-actions">
-              {isStaff && <button className="rl-action-btn" onClick={() => hideReel(r.id)} title="Hide">🚫</button>}
+              <div className="rl-actions">
+                {isStaff && <button className="rl-action-btn" onClick={() => hideReel(r.id)} title="Hide">🚫</button>}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <button className="rl-add-btn" onClick={() => setShowAdd(true)} title="Share a link">➕</button>
 

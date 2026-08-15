@@ -3,11 +3,13 @@ import { useEffect, useRef } from "react";
 import { signOut } from "firebase/auth";
 import { auth } from "./firebase/config";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { LanguageProvider } from "./contexts/LanguageContext";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ProfileSetup from "./pages/ProfileSetup";
 import Dashboard from "./pages/Dashboard";
 import SplashScreen from "./components/SplashScreen";
+import { unlockAudio } from "./lib/sounds";
 
 const IDLE_MS = 45 * 60 * 1000;
 
@@ -84,11 +86,32 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Real browser limit, not a bug: audio can't play automatically until the user has
+  // interacted with the page at least once (a security policy in every major browser).
+  // This listens for the very first tap/click/keypress anywhere and "unlocks" audio
+  // for the rest of the session — this is what actually makes sounds work reliably,
+  // not just removing "muted" from individual elements.
+  useEffect(() => {
+    const unlock = () => {
+      unlockAudio();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>
-        <SplashScreen />
-        <AppRoutes />
+        <LanguageProvider>
+          <SplashScreen />
+          <AppRoutes />
+        </LanguageProvider>
       </AuthProvider>
     </BrowserRouter>
   );

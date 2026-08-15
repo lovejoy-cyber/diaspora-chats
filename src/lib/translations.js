@@ -7,7 +7,7 @@ export const LANGUAGES = { en: "English", fr: "Français" };
 
 const DICT = {
   en: {
-    feed: "Feed", messages: "Messages", rooms: "Rooms & Groups", marketplace: "Marketplace",
+    feed: "Feed", messages: "Messages", rooms: "Rooms & Groups", market: "Market",
     embassy: "Embassy", calls: "Calls", people: "People", myProfile: "My Profile",
     reels: "Reels", assistant: "Assistant",
     signIn: "Sign In", signOut: "Sign Out", createAccount: "Create Account",
@@ -16,9 +16,19 @@ const DICT = {
     settings: "Settings", editProfile: "Edit Profile", welcomeBack: "Welcome back",
     home: "Home", chat: "Chat", darkMode: "Dark Mode", lightMode: "Light Mode",
     notifications: "Notifications", noNotificationsYet: "No notifications yet",
+    posts: "Posts", newMessage: "New Message", searchConversations: "Search conversations...",
+    signInToAccount: "Sign in to your account", forgotPassword: "Forgot your password?",
+    newHere: "New here?", loading: "Loading...", tapToChat: "Tap to chat",
+    everyone: "Everyone", following: "Following", official: "Official", saved: "Saved",
+    whatsOnYourMind: "What's on your mind", photo: "Photo", video: "Video", document: "Document",
+    profile: "Profile", createGroup: "Create Group", joinCall: "Join Group Call",
+    security: "Security", privileges: "Privileges", language: "Language",
+    verified: "Verified", online: "Online", offline: "Offline", typing: "typing...",
+    yes: "Yes", no: "No", ok: "OK", close: "Close", delete: "Delete", edit: "Edit",
+    report: "Report", block: "Block", mute: "Mute", archive: "Archive",
   },
   fr: {
-    feed: "Fil d'actualité", messages: "Messages", rooms: "Salons & Groupes", marketplace: "Marché",
+    feed: "Fil d'actualité", messages: "Messages", rooms: "Salons & Groupes", market: "Marché",
     embassy: "Ambassade", calls: "Appels", people: "Personnes", myProfile: "Mon Profil",
     reels: "Vidéos", assistant: "Assistant",
     signIn: "Se connecter", signOut: "Se déconnecter", createAccount: "Créer un compte",
@@ -27,6 +37,16 @@ const DICT = {
     settings: "Paramètres", editProfile: "Modifier le profil", welcomeBack: "Bon retour",
     home: "Accueil", chat: "Discussion", darkMode: "Mode sombre", lightMode: "Mode clair",
     notifications: "Notifications", noNotificationsYet: "Aucune notification pour l'instant",
+    posts: "Publications", newMessage: "Nouveau message", searchConversations: "Rechercher des conversations...",
+    signInToAccount: "Connectez-vous à votre compte", forgotPassword: "Mot de passe oublié ?",
+    newHere: "Nouveau ici ?", loading: "Chargement...", tapToChat: "Appuyez pour discuter",
+    everyone: "Tout le monde", following: "Abonnements", official: "Officiel", saved: "Enregistrés",
+    whatsOnYourMind: "À quoi pensez-vous", photo: "Photo", video: "Vidéo", document: "Document",
+    profile: "Profil", createGroup: "Créer un groupe", joinCall: "Rejoindre l'appel de groupe",
+    security: "Sécurité", privileges: "Privilèges", language: "Langue",
+    verified: "Vérifié", online: "En ligne", offline: "Hors ligne", typing: "en train d'écrire...",
+    yes: "Oui", no: "Non", ok: "OK", close: "Fermer", delete: "Supprimer", edit: "Modifier",
+    report: "Signaler", block: "Bloquer", mute: "Muet", archive: "Archiver",
   },
 };
 

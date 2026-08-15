@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { db, auth } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
-import { uploadToCloudinary } from "../lib/helpers";
+import { uploadToCloudinary, isValidPhone } from "../lib/helpers";
 
 // Note: there is deliberately no "I am a..." role picker here anymore. Everyone starts
 // as a plain user (role: "student" is the base access level internally, not a label
@@ -37,6 +37,7 @@ export default function ProfileSetup() {
     e.preventDefault();
     setErr("");
     if (!photo) return setErr("Please add a profile photo — it is required for community verification.");
+    if (phone.trim() && !isValidPhone(phone)) return setErr("Please enter your phone number with a country code, e.g. +213 555 123 456.");
     if (!agreedGuidelines) return setErr("Please read and accept the Community Guidelines to continue.");
     setLoading(true);
     try {

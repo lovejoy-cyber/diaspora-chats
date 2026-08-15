@@ -145,9 +145,28 @@ export function callChannelId(uidA, uidB) {
   return "call_" + [uidA, uidB].sort().join("_").slice(0, 60);
 }
 
+// Every room gets its own persistent, dedicated call channel, derived from the room's
+// own ID — this is what "each group must have its call feature" actually means: not
+// the old single nationality-wide group call, but a real, separate channel per room
+// that anyone currently viewing that room can join.
+export function roomCallChannelId(roomId) {
+  return "room_" + String(roomId).replace(/[^a-zA-Z0-9]/g, "").slice(0, 55);
+}
+
 // Daily per-recipient call limit (see CALLS.md discussion) — protects people from being
 // spammed with repeated calls and helps keep everyone within the free Agora usage tier.
 export const MAX_CALLS_PER_RECIPIENT_PER_DAY = 4;
 
 // How long an unanswered call rings before it's automatically marked "missed."
 export const CALL_RING_TIMEOUT_MS = 22000;
+
+// Validates an international phone number in the general +CountryCode format —
+// doesn't try to validate against every country's exact numbering rules (that's
+// genuinely a huge undertaking), just checks it starts with + and has a sane number
+// of digits, which catches the common real mistakes (forgetting the country code,
+// pasting letters, way too short/long).
+export function isValidPhone(phone) {
+  const trimmed = phone.trim();
+  if (!trimmed) return false;
+  return /^\+[1-9]\d{6,14}$/.test(trimmed.replace(/[\s()-]/g, ""));
+}

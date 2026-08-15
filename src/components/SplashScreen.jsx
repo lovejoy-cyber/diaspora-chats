@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { playStartupSound } from "../lib/sounds";
 
 // A real cinematic entrance sequence, not a small logo fade:
 // 1. Black canvas, a single point of light ignites center-screen
@@ -114,6 +115,7 @@ export default function SplashScreen() {
       document.head.appendChild(s);
     }
     sessionStorage.setItem("dl_splash_shown", "true");
+    playStartupSound();
     const timer = setTimeout(() => setShow(false), 4200);
     return () => clearTimeout(timer);
   }, [show]);

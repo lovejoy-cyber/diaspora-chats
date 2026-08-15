@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { collection, getDocs, query, where, orderBy, limit, onSnapshot, updateDoc, doc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
-import { isUserOnline, threadId, AGORA_APP_ID, fetchAgoraToken, callChannelId } from "../lib/helpers";
+import { isUserOnline, threadId, AGORA_APP_ID, fetchAgoraToken, callChannelId, roomCallChannelId } from "../lib/helpers";
 import { placeCall, updateCallStatus } from "../lib/callSignaling";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
@@ -161,6 +161,23 @@ export default function Calls() {
     // eslint-disable-next-line
   }, [searchParams]);
 
+  // Joining a specific room's dedicated call channel — this is the real per-room calling
+  // feature. Uses the same proven join() function as everyone else, just with a channel
+  // ID derived from the room instead of a person or nationality — anyone currently in
+  // this room can navigate here via the same link and land in the same live call.
+  useEffect(() => {
+    const roomCallId = searchParams.get("roomCall");
+    const roomName = searchParams.get("roomName");
+    const roomType = searchParams.get("type");
+    if (!roomCallId) return;
+    const channel = roomCallChannelId(roomCallId);
+    setTarget({ fullName: (roomName ? decodeURIComponent(roomName) : "Room") + " Call", photoURL: "" });
+    setGroup(true);
+    join(channel, roomType || "voice");
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line
+  }, [searchParams]);
+
   // Recent Calls log — merges "calls I made" and "calls I received" into one
   // chronological list, like every phone's native call history.
   useEffect(() => {
@@ -214,18 +231,15 @@ export default function Calls() {
       AgoraRTC.setLogLevel(4);
       const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
       clientRef.current = client;
-      const token = await fetchAgoraToken(channel, currentUser.uid);
-      await client.join(AGORA_APP_ID, channel, token, currentUser.uid);
-      const tracks = [];
-      const mic = await AgoraRTC.createMicrophoneAudioTrack();
-      tracks.push(mic);
-      if (callType === "video") {
-        const cam = await AgoraRTC.createCameraVideoTrack();
-        tracks.push(cam);
-        setLocalCamTrack(cam); // triggers the useEffect above once the DOM box exists
-      }
-      await client.publish(tracks);
-      tracksRef.current = tracks;
+
+      // Register event listeners BEFORE joining/publishing — this is the actual fix for
+      // "I call someone and see their video, but they don't see mine" (or vice versa).
+      // The previous code attached "user-published" only after client.join() AND after
+      // mic/camera setup AND after client.publish() — all of which take real time
+      // (hardware permission prompts, device init). Anyone who published during that
+      // window had their event fire before we were listening at all, so we'd never
+      // process them — exactly a one-sided call. Listeners now go on first, so nothing
+      // can be missed regardless of how long our own setup takes.
       client.on("user-published", async (user, media) => {
         await client.subscribe(user, media);
         setState("in-call");
@@ -263,6 +277,45 @@ export default function Calls() {
         });
         if (client.remoteUsers.length === 0) end();
       });
+
+      // NOW actually join and publish — listeners are already attached above, so no
+      // remote user's event can be missed regardless of how long this setup takes.
+      const token = await fetchAgoraToken(channel, currentUser.uid);
+      await client.join(AGORA_APP_ID, channel, token, currentUser.uid);
+
+      // Catch anyone who was ALREADY in the channel and had already published before we
+      // joined — Agora's own client.remoteUsers list reflects the current channel state
+      // immediately after join(), so we process it directly rather than relying only on
+      // "user-published" events, which only fire for NEW publishes after we're listening.
+      for (const existingUser of client.remoteUsers) {
+        for (const media of ["audio", "video"]) {
+          if ((media === "audio" && existingUser.hasAudio) || (media === "video" && existingUser.hasVideo)) {
+            try {
+              await client.subscribe(existingUser, media);
+              setState("in-call");
+              setRemoteUsers(prev => {
+                const next = new Map(prev);
+                const existing = next.get(existingUser.uid) || {};
+                if (media === "audio") { existingUser.audioTrack.play(); next.set(existingUser.uid, { ...existing, audioTrack: existingUser.audioTrack }); }
+                if (media === "video") { next.set(existingUser.uid, { ...existing, videoTrack: existingUser.videoTrack }); }
+                return next;
+              });
+            } catch (e) { /* subscribing to a pre-existing user failing shouldn't block the whole call */ }
+          }
+        }
+      }
+
+      const tracks = [];
+      const mic = await AgoraRTC.createMicrophoneAudioTrack();
+      tracks.push(mic);
+      if (callType === "video") {
+        const cam = await AgoraRTC.createCameraVideoTrack();
+        tracks.push(cam);
+        setLocalCamTrack(cam); // triggers the useEffect above once the DOM box exists
+      }
+      await client.publish(tracks);
+      tracksRef.current = tracks;
+
       setTimeout(() => setState(s => s === "calling" ? "in-call" : s), 4000);
     } catch (e) {
       console.error("Call error:", e);

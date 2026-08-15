@@ -18,7 +18,7 @@ import ViewProfile from "./ViewProfile";
 import NotificationBell from "../components/NotificationBell";
 import GlobalSearch from "../components/GlobalSearch";
 import IncomingCallListener from "../components/IncomingCallListener";
-import { useTranslation } from "../lib/useTranslation";
+import { useLanguage } from "../contexts/LanguageContext";
 
 const ROLE_LABELS = {
   admin: {label:"Super Admin", cls:"role-badge-admin"},
@@ -37,7 +37,7 @@ const NAV = [
   {path:"",labelKey:"feed",icon:"🏠",end:true},
   {path:"messages",labelKey:"messages",icon:"💬"},
   {path:"rooms",labelKey:"rooms",icon:"🌍"},
-  {path:"market",labelKey:"marketplace",icon:"🛍️"},
+  {path:"market",labelKey:"market",icon:"🛍️"},
   {path:"embassy",labelKey:"embassy",icon:"🏛️"},
   {path:"reels",labelKey:"reels",icon:"🎬"},
   {path:"assistant",labelKey:"assistant",icon:"🤖"},
@@ -50,7 +50,7 @@ const NAV = [
 
 export default function Dashboard() {
   const { userProfile, isStaff, isAdmin } = useAuth();
-  const { t } = useTranslation();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("dl_theme") || "light");
@@ -172,22 +172,22 @@ export default function Dashboard() {
 
         <nav className="mobile-nav">
           <NavLink to="/dashboard" end className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
-            <span className="mobile-nav-icon">🏠</span>Posts
+            <span className="mobile-nav-icon">🏠</span>{t("posts")}
           </NavLink>
           <NavLink to="/dashboard/messages" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
-            <span className="mobile-nav-icon">💬</span>Chat
+            <span className="mobile-nav-icon">💬</span>{t("chat")}
           </NavLink>
           <NavLink to="/dashboard/reels" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
-            <span className="mobile-nav-icon">🎬</span>Reels
+            <span className="mobile-nav-icon">🎬</span>{t("reels")}
           </NavLink>
           <NavLink to="/dashboard/market" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
-            <span className="mobile-nav-icon">🛍️</span>Market
+            <span className="mobile-nav-icon">🛍️</span>{t("market")}
           </NavLink>
           <NavLink to="/dashboard/rooms" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
-            <span className="mobile-nav-icon">🌍</span>Rooms
+            <span className="mobile-nav-icon">🌍</span>{t("rooms")}
           </NavLink>
           <NavLink to="/dashboard/calls" className={({isActive})=>"mobile-nav-item"+(isActive?" active":"")}>
-            <span className="mobile-nav-icon">📞</span>Calls
+            <span className="mobile-nav-icon">📞</span>{t("calls")}
           </NavLink>
         </nav>
       </main>

@@ -160,6 +160,7 @@ export default function Messages() {
   const chunksRef = useRef([]);
   const typingTimeoutRef = useRef(null);
   const fileRef = useRef(null);
+  const videoFileRef = useRef(null);
   const docFileRef = useRef(null);
 
   useEffect(() => {
@@ -419,6 +420,15 @@ export default function Messages() {
     setSending(false); e.target.value = "";
   };
 
+  const handleVideo = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setShowAttach(false); setSending(true);
+    try { const videoUrl = await uploadToCloudinary(file, "video"); await sendMessage({ videoUrl, type: "video", text: "" }); }
+    catch { alert("Video upload failed."); }
+    setSending(false); e.target.value = "";
+  };
+
   const handleDoc = async e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -670,6 +680,7 @@ export default function Messages() {
                             {msg.forwarded && !msg.deleted && <div style={{ fontSize: 10.5, opacity: .7, fontStyle: "italic", marginBottom: 3 }}>➦ Forwarded</div>}
                             {msg.replyTo && !msg.deleted && <div className="ms-quote"><strong>{msg.replyTo.senderName}</strong><br />{msg.replyTo.text}</div>}
                             {msg.type === "image" && msg.imageUrl && !msg.deleted && <img src={msg.imageUrl} alt="" onClick={() => setLightboxSrc(msg.imageUrl)} />}
+                            {msg.type === "video" && msg.videoUrl && !msg.deleted && <video src={msg.videoUrl} controls playsInline style={{ maxWidth: 260, borderRadius: 10, display: "block" }} />}
                             {msg.type === "audio" && msg.audioUrl && !msg.deleted && <AudioPlayer url={msg.audioUrl} />}
                             {msg.type === "doc" && msg.docUrl && !msg.deleted && (
                               <a href={msg.docUrl} target="_blank" rel="noreferrer" style={{ color: "inherit", display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
@@ -723,6 +734,10 @@ export default function Messages() {
                     <span className="ms-attach-icon" style={{ background: "rgba(59,130,246,.18)", color: "#60a5fa" }}>📷</span>
                     <span className="ms-attach-label">Photo</span>
                   </button>
+                  <button className="ms-attach-opt" onClick={() => { videoFileRef.current?.click(); }}>
+                    <span className="ms-attach-icon" style={{ background: "rgba(236,72,153,.18)", color: "#f472b6" }}>🎬</span>
+                    <span className="ms-attach-label">Video</span>
+                  </button>
                   <button className="ms-attach-opt" onClick={() => { docFileRef.current?.click(); }}>
                     <span className="ms-attach-icon" style={{ background: "rgba(139,92,246,.18)", color: "#a78bfa" }}>📄</span>
                     <span className="ms-attach-label">Document</span>
@@ -734,6 +749,7 @@ export default function Messages() {
                 </div>
               )}
               <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhoto} />
+              <input ref={videoFileRef} type="file" accept="video/*" style={{ display: "none" }} onChange={handleVideo} />
               <input ref={docFileRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" style={{ display: "none" }} onChange={handleDoc} />
               <button className="ms-attach-btn" onClick={() => setShowAttach(!showAttach)} title="Attach">📎</button>
               <button

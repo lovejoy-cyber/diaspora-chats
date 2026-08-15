@@ -97,17 +97,41 @@ export default function Stories() {
     e.target.value = "";
   };
 
+  // Reads the actual duration of a video file client-side, before upload, using a
+  // temporary hidden <video> element — this is what lets the viewer show a video for
+  // its real length instead of a fixed 5 seconds.
+  const getVideoDuration = (file) => {
+    return new Promise((resolve) => {
+      try {
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.onloadedmetadata = () => {
+          const ms = Math.round((video.duration || 5) * 1000);
+          URL.revokeObjectURL(video.src);
+          resolve(ms);
+        };
+        video.onerror = () => resolve(15000); // fallback: assume 15s if we can't read it
+        video.src = URL.createObjectURL(file);
+      } catch (e) { resolve(15000); }
+    });
+  };
+
   const postStory = async () => {
     if (!mediaFile && !textOnly.trim()) return;
     setPosting(true);
     try {
       let mediaUrl = null;
-      if (mediaFile) mediaUrl = await uploadToCloudinary(mediaFile, mediaType === "video" ? "video" : "image");
+      let videoDurationMs = null;
+      if (mediaFile) {
+        mediaUrl = await uploadToCloudinary(mediaFile, mediaType === "video" ? "video" : "image");
+        if (mediaType === "video") videoDurationMs = await getVideoDuration(mediaFile);
+      }
       await addDoc(collection(db, "stories"), {
         authorId: currentUser.uid,
         authorName: userProfile.fullName,
         authorPhoto: userProfile.photoURL || "",
         mediaUrl, mediaType: mediaFile ? mediaType : "text",
+        videoDurationMs,
         text: textOnly.trim(),
         viewedBy: [],
         createdAt: serverTimestamp(),
@@ -133,7 +157,16 @@ export default function Stories() {
     markSeen(current);
     setProgress(0);
     clearInterval(progressTimerRef.current);
-    const duration = 5000;
+    // Real fix for "video cuts immediately": duration was a fixed 5 seconds for every
+    // status regardless of type, forcibly advancing any video at the 5-second mark no
+    // matter how long it actually was. Videos now use their own real length (read from
+    // the story's stored duration, capped at 60s as a sane maximum for a status), while
+    // photos keep the original 5-second default. Videos posted BEFORE this fix won't
+    // have a stored duration — those fall back to 15 seconds (not the old 5s), a more
+    // reasonable default for a video specifically rather than a photo's quick glance.
+    const duration = current.mediaType === "video"
+      ? Math.min(current.videoDurationMs || 15000, 60000)
+      : 5000;
     const step = 50;
     let elapsed = 0;
     progressTimerRef.current = setInterval(() => {
@@ -244,7 +277,7 @@ export default function Stories() {
             <div className="st-viewer-nav left" onClick={() => viewerIndex > 0 ? setViewerIndex(i => i - 1) : setViewerGroup(null)} />
             <div className="st-viewer-nav right" onClick={() => viewerIndex < viewerGroup.items.length - 1 ? setViewerIndex(i => i + 1) : setViewerGroup(null)} />
             {viewerGroup.items[viewerIndex].mediaType === "image" && <img src={viewerGroup.items[viewerIndex].mediaUrl} alt="" />}
-            {viewerGroup.items[viewerIndex].mediaType === "video" && <video src={viewerGroup.items[viewerIndex].mediaUrl} autoPlay muted playsInline />}
+            {viewerGroup.items[viewerIndex].mediaType === "video" && <video src={viewerGroup.items[viewerIndex].mediaUrl} autoPlay playsInline controls={false} />}
             {viewerGroup.items[viewerIndex].mediaType === "text" && <div className="st-viewer-text">{viewerGroup.items[viewerIndex].text}</div>}
           </div>
         </div>

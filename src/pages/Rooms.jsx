@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, limit, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { COUNTRY_ROOMS, INTEREST_ROOMS, CONTINENTS } from "../lib/rooms";
-import { cleanText as cleanTextHelper } from "../lib/helpers";
+import { cleanText as cleanTextHelper, uploadToCloudinary } from "../lib/helpers";
 
 const PRESET_ROOMS = [
   ...INTEREST_ROOMS.map(r => ({ id: r.id, name: r.name, desc: r.desc, type: r.type, country: null, color: r.color })),
@@ -83,11 +83,14 @@ const STYLE = `
 export default function Rooms() {
   const { currentUser, userProfile, isStaff } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [activeRoom, setActiveRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [bannedFromActiveRoom, setBannedFromActiveRoom] = useState(false);
   const [showRoomMembers, setShowRoomMembers] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
   const [roomUserSearch, setRoomUserSearch] = useState("");
   const [allUsersForBan, setAllUsersForBan] = useState([]);
   const [roomBans, setRoomBans] = useState([]);
@@ -166,10 +169,12 @@ export default function Rooms() {
     return false;
   };
 
-  const sendMessage = async () => {
-    if(!text.trim()||!activeRoom||!canPost(activeRoom)) return;
+  const sendMessage = async (overrides = {}) => {
+    const hasText = text.trim();
+    const hasMedia = overrides.imageUrl || overrides.videoUrl || overrides.docUrl || overrides.audioUrl;
+    if((!hasText && !hasMedia)||!activeRoom||!canPost(activeRoom)) return;
     if(bannedFromActiveRoom) return;
-    const filtered = filterContent(text.trim());
+    const filtered = hasText ? filterContent(text.trim()) : "";
     await addDoc(collection(db,"rooms",activeRoom.id,"messages"), {
       text:filtered,
       senderId:currentUser.uid,
@@ -178,6 +183,12 @@ export default function Rooms() {
       senderRole:userProfile.role||"student",
       senderVerified:userProfile.verified||false,
       pinned:false,
+      type: overrides.type || "text",
+      imageUrl: overrides.imageUrl || null,
+      videoUrl: overrides.videoUrl || null,
+      docUrl: overrides.docUrl || null,
+      docName: overrides.docName || null,
+      audioUrl: overrides.audioUrl || null,
       createdAt:serverTimestamp(),
     });
     // Notify on room activity, but debounced to once per room per 10 minutes — notifying
@@ -189,16 +200,75 @@ export default function Rooms() {
     const lastNotify = Number(sessionStorage.getItem(lastNotifyKey) || 0);
     if (Date.now() - lastNotify > 10 * 60 * 1000) {
       sessionStorage.setItem(lastNotifyKey, String(Date.now()));
+      const activitySummary = hasText ? filtered.slice(0, 60) : (overrides.type === "image" ? "📷 Photo" : overrides.type === "audio" ? "🎙 Voice message" : overrides.type === "doc" ? "📄 Document" : "New message");
       addDoc(collection(db, "notifications"), {
         recipientId: "ALL", urgent: false, icon: "🌍",
         title: "New activity in " + activeRoom.name,
-        message: userProfile.fullName + ": " + filtered.slice(0, 60),
+        message: userProfile.fullName + ": " + activitySummary,
         link: "/dashboard/rooms",
         read: false, createdAt: serverTimestamp(),
       }).catch(() => {});
     }
     setText("");
   };
+
+  // Room media uploads — photo, document, and voice message support, matching the
+  // same real functionality already proven working in 1-on-1 Messages. This was
+  // genuinely missing from Rooms entirely before now, not a bug — new functionality.
+  const [showRoomAttach, setShowRoomAttach] = useState(false);
+  const [roomSending, setRoomSending] = useState(false);
+  const [roomRecording, setRoomRecording] = useState(false);
+  const roomMediaRecRef = useRef(null);
+  const roomChunksRef = useRef([]);
+  const roomPhotoRef = useRef(null);
+  const roomVideoRef = useRef(null);
+  const roomDocRef = useRef(null);
+
+  const handleRoomPhoto = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setShowRoomAttach(false); setRoomSending(true);
+    try { const imageUrl = await uploadToCloudinary(file, "image"); await sendMessage({ imageUrl, type: "image" }); }
+    catch { alert("Photo upload failed."); }
+    setRoomSending(false); e.target.value = "";
+  };
+
+  const handleRoomVideo = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setShowRoomAttach(false); setRoomSending(true);
+    try { const videoUrl = await uploadToCloudinary(file, "video"); await sendMessage({ videoUrl, type: "video" }); }
+    catch { alert("Video upload failed."); }
+    setRoomSending(false); e.target.value = "";
+  };
+
+  const handleRoomDoc = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setShowRoomAttach(false); setRoomSending(true);
+    try { const docUrl = await uploadToCloudinary(file, "raw"); await sendMessage({ docUrl, docName: file.name, type: "doc" }); }
+    catch { alert("Document upload failed."); }
+    setRoomSending(false); e.target.value = "";
+  };
+
+  const startRoomRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      roomChunksRef.current = [];
+      rec.ondataavailable = e => roomChunksRef.current.push(e.data);
+      rec.onstop = async () => {
+        const blob = new Blob(roomChunksRef.current, { type: "audio/webm" });
+        stream.getTracks().forEach(t => t.stop());
+        setRoomSending(true);
+        try { const audioUrl = await uploadToCloudinary(blob, "video"); await sendMessage({ audioUrl, type: "audio" }); }
+        catch { alert("Voice message upload failed."); }
+        setRoomSending(false);
+      };
+      rec.start(); roomMediaRecRef.current = rec; setRoomRecording(true);
+    } catch { alert("Microphone permission denied."); }
+  };
+  const stopRoomRecording = () => { if (roomMediaRecRef.current) { roomMediaRecRef.current.stop(); setRoomRecording(false); } };
 
   // Room-level ban list — the actual "add/remove someone from the group" power a Governor
   // needs, since preset country/city rooms don't have a fixed member list the way custom
@@ -257,6 +327,20 @@ export default function Rooms() {
 
   const allPreset = PRESET_ROOMS.filter(r=>r.name.toLowerCase().includes(search.toLowerCase())||r.desc.toLowerCase().includes(search.toLowerCase()));
   const allCustom = customRooms.filter(r=>r.name.toLowerCase().includes(search.toLowerCase()));
+
+  // Handles arriving via a room invite link (?join=roomId) — finds the matching room
+  // (preset or custom) and auto-selects it, so the link genuinely drops someone straight
+  // into the room rather than just opening the general Rooms page.
+  useEffect(() => {
+    const joinRoomId = searchParams.get("join");
+    if (!joinRoomId) return;
+    const found = PRESET_ROOMS.find(r => r.id === joinRoomId) || customRooms.find(r => r.id === joinRoomId);
+    if (found) {
+      setActiveRoom(found);
+      setShowSidebar(false);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, customRooms]);
 
   const getRoomColor = (room) => {
     if(room.isCustom) return "#f59e0b";
@@ -320,14 +404,31 @@ export default function Rooms() {
                 <h3 style={{fontSize:15,fontWeight:800}}>{activeRoom.name}</h3>
                 <p style={{fontSize:11,color:"var(--text2)"}}>{activeRoom.desc}</p>
               </div>
-              {canModerateRoom(activeRoom) && (
+              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                 <button
-                  onClick={() => setShowRoomMembers(true)}
-                  style={{ marginLeft: "auto", background: "rgba(59,130,246,.12)", border: "1px solid rgba(59,130,246,.25)", color: "var(--primary-light)", padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  👥 Manage
-                </button>
-              )}
+                  onClick={() => navigate("/dashboard/calls?roomCall=" + activeRoom.id + "&roomName=" + encodeURIComponent(activeRoom.name) + "&type=voice")}
+                  title="Voice call this group"
+                  style={{ background: "rgba(16,185,129,.12)", border: "1px solid rgba(16,185,129,.25)", color: "#34d399", width: 34, height: 34, borderRadius: "50%", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}
+                >📞</button>
+                <button
+                  onClick={() => navigate("/dashboard/calls?roomCall=" + activeRoom.id + "&roomName=" + encodeURIComponent(activeRoom.name) + "&type=video")}
+                  title="Video call this group"
+                  style={{ background: "rgba(59,130,246,.12)", border: "1px solid rgba(59,130,246,.25)", color: "var(--primary-light)", width: 34, height: 34, borderRadius: "50%", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}
+                >📹</button>
+                <button
+                  onClick={() => setShowInviteModal(true)}
+                  title="Invite people to this room"
+                  style={{ background: "rgba(245,158,11,.12)", border: "1px solid rgba(245,158,11,.25)", color: "#fbbf24", width: 34, height: 34, borderRadius: "50%", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}
+                >🔗</button>
+                {canModerateRoom(activeRoom) && (
+                  <button
+                    onClick={() => setShowRoomMembers(true)}
+                    style={{ background: "rgba(59,130,246,.12)", border: "1px solid rgba(59,130,246,.25)", color: "var(--primary-light)", padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    👥 Manage
+                  </button>
+                )}
+              </div>
             </div>
 
             {messages.some(m => m.pinned && !m.deleted) && (
@@ -366,6 +467,20 @@ export default function Rooms() {
                       )}
                       <div className={"room-msg-bubble"+(isMine?" mine":" theirs")}>
                         {msg.pinned && !msg.deleted && <div style={{ fontSize: 10, opacity: .75, marginBottom: 3 }}>📌 Pinned</div>}
+                        {msg.type === "image" && msg.imageUrl && !msg.deleted && (
+                          <img src={msg.imageUrl} alt="" style={{ maxWidth: 220, borderRadius: 10, display: "block", cursor: "pointer" }} onClick={() => window.open(msg.imageUrl, "_blank")} />
+                        )}
+                        {msg.type === "video" && msg.videoUrl && !msg.deleted && (
+                          <video src={msg.videoUrl} controls playsInline style={{ maxWidth: 260, borderRadius: 10, display: "block" }} />
+                        )}
+                        {msg.type === "doc" && msg.docUrl && !msg.deleted && (
+                          <a href={msg.docUrl} target="_blank" rel="noreferrer" style={{ color: "inherit", display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+                            📄 <span style={{ textDecoration: "underline" }}>{msg.docName || "Document"}</span>
+                          </a>
+                        )}
+                        {msg.type === "audio" && msg.audioUrl && !msg.deleted && (
+                          <audio controls src={msg.audioUrl} style={{ maxWidth: 220, height: 34 }} />
+                        )}
                         {msg.text}
                       </div>
                       <div className="room-msg-time" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -395,8 +510,34 @@ export default function Rooms() {
                 </div>
               ) : (
                 <>
-                  <input className="room-input" placeholder={"Message "+activeRoom.name+"..."} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){sendMessage();}}} />
-                  <button className="room-send-btn" onClick={sendMessage} disabled={!text.trim()}>➤</button>
+                  <input ref={roomPhotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleRoomPhoto} />
+                  <input ref={roomVideoRef} type="file" accept="video/*" style={{ display: "none" }} onChange={handleRoomVideo} />
+                  <input ref={roomDocRef} type="file" style={{ display: "none" }} onChange={handleRoomDoc} />
+                  <div style={{ position: "relative" }}>
+                    <button className="room-send-btn" style={{ background: "rgba(255,255,255,.08)" }} onClick={() => setShowRoomAttach(!showRoomAttach)} disabled={roomSending}>📎</button>
+                    {showRoomAttach && (
+                      <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 12, padding: 8, display: "flex", flexDirection: "column", gap: 4, minWidth: 160, boxShadow: "0 12px 32px rgba(0,0,0,.5)", zIndex: 30 }}>
+                        <div onClick={() => { setShowRoomAttach(false); roomPhotoRef.current?.click(); }} style={{ padding: "9px 12px", cursor: "pointer", borderRadius: 8, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>📷 Photo</div>
+                        <div onClick={() => { setShowRoomAttach(false); roomVideoRef.current?.click(); }} style={{ padding: "9px 12px", cursor: "pointer", borderRadius: 8, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>🎬 Video</div>
+                        <div onClick={() => { setShowRoomAttach(false); roomDocRef.current?.click(); }} style={{ padding: "9px 12px", cursor: "pointer", borderRadius: 8, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>📄 Document</div>
+                      </div>
+                    )}
+                  </div>
+                  <input className="room-input" placeholder={"Message "+activeRoom.name+"..."} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){sendMessage();}}} disabled={roomSending} />
+                  {text.trim() ? (
+                    <button className="room-send-btn" onClick={() => sendMessage()} disabled={roomSending}>➤</button>
+                  ) : (
+                    <button
+                      className="room-send-btn"
+                      style={{ background: roomRecording ? "var(--danger)" : undefined }}
+                      onMouseDown={startRoomRecording} onMouseUp={stopRoomRecording}
+                      onTouchStart={startRoomRecording} onTouchEnd={stopRoomRecording}
+                      disabled={roomSending}
+                      title="Hold to record a voice message"
+                    >
+                      {roomRecording ? "⏹" : "🎙"}
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -479,6 +620,39 @@ export default function Rooms() {
             </div>
 
             <button className="btn-secondary" onClick={() => setShowRoomMembers(false)}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {showInviteModal && activeRoom && (
+        <div className="modal-overlay" onClick={() => { setShowInviteModal(false); setInviteCopied(false); }}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3>🔗 Invite to {activeRoom.name}</h3>
+            <p style={{ fontSize: 12.5, color: "var(--text2)", marginBottom: 16, lineHeight: 1.6 }}>
+              Share this link with anyone — if they already have an account, tapping it opens this room directly.
+              If they're new, it takes them to sign up first, then drops them right into this room.
+            </p>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input
+                readOnly
+                value={window.location.origin + "/dashboard/rooms?join=" + activeRoom.id}
+                style={{ flex: 1, padding: "10px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 9, color: "var(--text)", fontSize: 12, fontFamily: "inherit" }}
+                onClick={e => e.target.select()}
+              />
+              <button
+                className="btn-primary"
+                style={{ margin: 0, width: "auto", padding: "0 16px" }}
+                onClick={() => {
+                  navigator.clipboard?.writeText(window.location.origin + "/dashboard/rooms?join=" + activeRoom.id).then(() => {
+                    setInviteCopied(true);
+                    setTimeout(() => setInviteCopied(false), 2000);
+                  }).catch(() => {});
+                }}
+              >
+                {inviteCopied ? "✅ Copied" : "Copy"}
+              </button>
+            </div>
+            <button className="btn-secondary" onClick={() => { setShowInviteModal(false); setInviteCopied(false); }}>Close</button>
           </div>
         </div>
       )}

@@ -12,10 +12,18 @@ const CATEGORIES = [
   { key: "news", query: "youth news trends education Africa" },
   { key: "life", query: "student life advice relationships motivation" },
   { key: "faith", query: "christian devotion encouragement short" },
+  { key: "trending", query: "trending viral funny shorts entertainment" },
+  { key: "jokes", query: "funny jokes comedy shorts clean humor" },
 ];
 
 async function searchYouTube(query, apiKey) {
-  const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&safeSearch=strict&maxResults=6&order=date&q=" +
+  // relevanceLanguage=en biases results toward English-language videos — the real fix
+  // for videos in unrelated languages showing up, since our search terms are generic
+  // English phrases that YouTube would otherwise match globally regardless of language.
+  // order=viewCount instead of order=date also surfaces genuinely popular/trending
+  // content rather than just whatever was uploaded most recently, which tends to be
+  // higher quality and more relevant.
+  const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&safeSearch=strict&maxResults=6&order=viewCount&relevanceLanguage=en&q=" +
     encodeURIComponent(query) + "&key=" + apiKey;
   const res = await fetch(url);
   if (!res.ok) {

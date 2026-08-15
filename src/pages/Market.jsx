@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, serverTimestamp, deleteDoc, limit } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, serverTimestamp, deleteDoc, limit, where, getDocs, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
+import { WORLD_COUNTRIES } from "../lib/rooms";
 import { uploadToCloudinary, cleanText, containsProfanity, timeAgo } from "../lib/helpers";
 import Avatar from "../components/Avatar";
 import RoleBadge from "../components/RoleBadge";
@@ -21,7 +22,9 @@ const CATEGORIES = [
   { id: "other",    label: "📦 Other" },
 ];
 const CURRENCIES = ["DZD","USD","EUR","GBP","ZAR","NGN","KES","XAF","XOF","ZMW","ETB","USDT","BTC","Other"];
-const COUNTRIES = ["Zimbabwe","Nigeria","Cameroon","DR Congo","Congo","Ivory Coast","Senegal","Mali","Ghana","Kenya","Ethiopia","South Africa","Mozambique","Zambia","Tanzania","Uganda","Rwanda","Togo","Benin","Chad","Sudan","Morocco","Tunisia","Algeria","Namibia","Botswana","Angola","Malawi","Egypt","Other"];
+// Money transfer routes genuinely happen between any two countries, not only
+// African ones — using the full world list, same as nationality.
+const COUNTRIES = WORLD_COUNTRIES;
 const DIRECTIONS = [
   { value: "sending",   label: "📤 I'm Sending Money", desc: "You have funds and want to send them somewhere" },
   { value: "receiving", label: "📥 I Want To Receive Money", desc: "You're expecting funds from abroad" },
@@ -90,6 +93,8 @@ export default function Market() {
   const [viewUid, setViewUid] = useState(null);
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [posting, setPosting] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingListing, setRatingListing] = useState(null);
   const [err, setErr] = useState("");
   const [img, setImg] = useState(null);
   const [prev, setPrev] = useState("");
@@ -162,12 +167,85 @@ export default function Market() {
           read: false, createdAt: serverTimestamp(),
         });
       } catch (e) {}
+      // The Commander specifically gets notified of every money-transfer listing —
+      // distinct from the general "ALL" broadcast, since this is about the Commander's
+      // real oversight responsibility over transaction activity, not a general update
+      // everyone happens to also see.
+      if (isTransfer) {
+        try {
+          await addDoc(collection(db, "notifications"), {
+            recipientId: "ADMIN", urgent: false, icon: "💰",
+            title: "Transaction activity",
+            message: userProfile.fullName + " posted a transfer: " + title,
+            link: "/dashboard/market",
+            read: false, createdAt: serverTimestamp(),
+          });
+        } catch (e) {}
+      }
       setShowForm(false); setImg(null); setPrev("");
     } catch { setErr("Could not post. Please try again."); }
     setPosting(false);
   };
 
-  const close = async (id) => { await updateDoc(doc(db, "listings", id), { status: "closed" }); };
+  const close = async (id) => {
+    // Closing a transfer listing now opens a real rating prompt instead of just
+    // flipping a status flag silently — this is what actually feeds the automatic
+    // Trusted Sender system with real data, closing the loop that was missing before.
+    const listing = items.find(l => l.id === id);
+    await updateDoc(doc(db, "listings", id), { status: "closed", closedAt: serverTimestamp() });
+    if (listing?.category === "transfer") {
+      setRatingListing(listing);
+      setShowRatingModal(true);
+    }
+  };
+
+  // Records a rating for the person who posted the listing, and recalculates whether
+  // they've now crossed the threshold for the automatic Trusted Sender badge — genuinely
+  // automatic this time, not the admin-manual-only toggle from before. Real criteria:
+  // at least 5 rated transfers, with at least 90% rated as successful.
+  const submitTransferRating = async (wasSuccessful) => {
+    if (!ratingListing) return;
+    try {
+      await addDoc(collection(db, "transferRatings"), {
+        listingId: ratingListing.id,
+        raterId: currentUser.uid,
+        ratedUserId: ratingListing.uid,
+        wasSuccessful,
+        createdAt: serverTimestamp(),
+      });
+      // Recalculate this person's real track record from actual rating history —
+      // not a guess, not a manual toggle, genuinely computed from real data.
+      const q = query(collection(db, "transferRatings"), where("ratedUserId", "==", ratingListing.uid));
+      const snap = await getDocs(q);
+      const total = snap.size;
+      const successful = snap.docs.filter(d => d.data().wasSuccessful).length;
+      const successRate = total > 0 ? successful / total : 0;
+      const qualifiesForTrusted = total >= 5 && successRate >= 0.9;
+
+      const userRef = doc(db, "users", ratingListing.uid);
+      const userSnap = await getDoc(userRef);
+      const alreadyTrusted = userSnap.exists() && userSnap.data().trustedSender === true;
+      const wasManuallySet = userSnap.exists() && userSnap.data().trustedSenderBy && userSnap.data().trustedSenderBy !== "AUTO";
+
+      // Never override a manual admin decision — automatic upgrade only applies if
+      // nobody has manually set this already, respecting the existing manual system.
+      if (qualifiesForTrusted && !alreadyTrusted && !wasManuallySet) {
+        await updateDoc(userRef, {
+          trustedSender: true, trustedSenderBy: "AUTO", trustedSenderAt: serverTimestamp(),
+          transferSuccessRate: successRate, transferRatingCount: total,
+        });
+        await addDoc(collection(db, "notifications"), {
+          recipientId: ratingListing.uid, urgent: false, icon: "💎",
+          title: "Trusted Sender badge earned!",
+          message: "Your track record of successful transfers has automatically earned you the Trusted Sender badge.",
+          link: "/dashboard/profile", read: false, createdAt: serverTimestamp(),
+        }).catch(() => {});
+      } else {
+        await updateDoc(userRef, { transferSuccessRate: successRate, transferRatingCount: total }).catch(() => {});
+      }
+    } catch (e) { /* rating failure shouldn't block the person from continuing to use the app */ }
+    setShowRatingModal(false); setRatingListing(null);
+  };
   const remove = async (id) => { if (window.confirm("Delete this listing?")) await deleteDoc(doc(db, "listings", id)); };
 
   const blocked = userProfile?.blockedUsers || [];
@@ -433,6 +511,34 @@ export default function Market() {
 
       {viewUid && <UserProfileModal uid={viewUid} onClose={() => setViewUid(null)} />}
       {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+
+      {showRatingModal && ratingListing && (
+        <div className="modal-overlay" onClick={() => { setShowRatingModal(false); setRatingListing(null); }}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3>💸 How Did The Transfer Go?</h3>
+            <p style={{ fontSize: 12.5, color: "var(--text2)", marginBottom: 18, lineHeight: 1.6 }}>
+              Your honest rating helps the community know who's reliable — and genuinely
+              contributes toward {ratingListing.posterName || "this person"} earning a Trusted Sender badge automatically.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                className="btn-primary"
+                style={{ margin: 0, background: "linear-gradient(135deg,#10b981,#059669)" }}
+                onClick={() => submitTransferRating(true)}
+              >
+                ✅ Went Well
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ margin: 0 }}
+                onClick={() => submitTransferRating(false)}
+              >
+                ⚠️ Had Issues
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

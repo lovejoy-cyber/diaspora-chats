@@ -3,12 +3,15 @@ import { Link } from "react-router-dom";
 import { createUserWithEmailAndPassword, sendEmailVerification } from "firebase/auth";
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
-import { COUNTRY_ROOMS } from "../lib/rooms";
+import { COUNTRY_ROOMS, WORLD_COUNTRIES } from "../lib/rooms";
 import { getOrCreatePersistentDeviceId } from "../lib/deviceFingerprint";
 import ReactiveAvatar from "../components/ReactiveAvatar";
 import { useSpotlight } from "../lib/useSpotlight";
 
-const NATIONALITIES = COUNTRY_ROOMS.map(r => r.country).concat(["Algerian","Other"]);
+// Nationality uses the full world list — not COUNTRY_ROOMS, which only lists the
+// specific African countries with dedicated community rooms. Being from any country
+// in the world doesn't change whether someone can join and use the app.
+const NATIONALITIES = WORLD_COUNTRIES;
 const UNIVERSITIES = ["USTO-MB (Oran)","Université d'Oran 1","Université d'Oran 2","ENPO (Oran)","Université de Mostaganem","Université d'Alger 1","Université d'Alger 2","Université d'Alger 3","USTHB (Alger)","Université de Constantine 1","Université de Constantine 2","Université de Constantine 3","Université de Annaba","Université de Sétif","Université de Tlemcen","Université de Béjaïa","Université de Tizi Ouzou","Université de Blida","Université de Batna","Other"];
 const CITIES = ["Oran","Alger","Constantine","Annaba","Sétif","Tlemcen","Béjaïa","Tizi Ouzou","Blida","Batna","Mostaganem","Other"];
 const GENDERS = [{value:"male",icon:"👨",label:"Male"},{value:"female",icon:"👩",label:"Female"},{value:"other",icon:"🧑",label:"Other"},{value:"prefer_not",icon:"🔒",label:"Private"}];
@@ -194,10 +197,18 @@ export default function Register() {
             </div>
             {form.occupation === "student" && (
               <div className="form-group"><label className="form-label">University</label>
-                <select name="university" className="form-input" value={form.university} onChange={handleChange} required>
-                  <option value="">Select your university...</option>
-                  {UNIVERSITIES.map(u=><option key={u} value={u}>{u}</option>)}
-                </select>
+                {form.nationality === "Algeria" ? (
+                  <select name="university" className="form-input" value={form.university} onChange={handleChange} required>
+                    <option value="">Select your university...</option>
+                    {UNIVERSITIES.map(u=><option key={u} value={u}>{u}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    name="university" type="text" className="form-input"
+                    placeholder="Type your university's name..."
+                    value={form.university} onChange={handleChange} required
+                  />
+                )}
               </div>
             )}
             <div className="form-group"><label className="form-label">City</label>

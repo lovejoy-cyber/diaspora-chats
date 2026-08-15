@@ -133,9 +133,27 @@ export default function Embassy() {
     if (!file) return;
     setSending(true);
     try {
-      const docUrl = await uploadToCloudinary(file, "raw");
-      await send({ docUrl, docName: file.name, text: "" });
-    } catch (err) { alert("Document upload failed. Please try again."); }
+      // Real media-aware handling — the previous version always uploaded as "raw" and
+      // displayed everything as a generic document link, even photos. Detects the actual
+      // file type and uploads/displays it correctly (inline image, playable video/audio),
+      // matching how Rooms and Messages already handle media.
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      const isAudio = file.type.startsWith("audio/");
+      if (isImage) {
+        const imageUrl = await uploadToCloudinary(file, "image");
+        await send({ imageUrl, text: "" });
+      } else if (isVideo) {
+        const videoUrl = await uploadToCloudinary(file, "video");
+        await send({ videoUrl, text: "" });
+      } else if (isAudio) {
+        const audioUrl = await uploadToCloudinary(file, "video"); // Cloudinary treats audio under its "video" resource type
+        await send({ audioUrl, text: "" });
+      } else {
+        const docUrl = await uploadToCloudinary(file, "raw");
+        await send({ docUrl, docName: file.name, text: "" });
+      }
+    } catch (err) { alert("Upload failed. Please try again."); }
     setSending(false); e.target.value = "";
   };
 
@@ -207,6 +225,15 @@ export default function Embassy() {
                   <div key={m.id} className={"em-msg" + (mine ? " mine" : "")}>
                     <div className={"em-bubble" + (mine ? " mine" : " theirs")}>
                       {!mine && <div style={{ fontSize: 10.5, fontWeight: 700, opacity: .8, marginBottom: 3 }}>{m.isFromEmbassy ? "🏛️ Embassy" : selectedName}</div>}
+                      {m.imageUrl && (
+                        <img src={m.imageUrl} alt="" style={{ maxWidth: 220, borderRadius: 10, display: "block", cursor: "pointer", marginBottom: m.text ? 6 : 0 }} onClick={() => window.open(m.imageUrl, "_blank")} />
+                      )}
+                      {m.videoUrl && (
+                        <video src={m.videoUrl} controls playsInline style={{ maxWidth: 260, borderRadius: 10, display: "block", marginBottom: m.text ? 6 : 0 }} />
+                      )}
+                      {m.audioUrl && (
+                        <audio controls src={m.audioUrl} style={{ maxWidth: 220, height: 34, marginBottom: m.text ? 6 : 0 }} />
+                      )}
                       {m.docUrl && (
                         <a href={m.docUrl} target="_blank" rel="noreferrer" className="em-doc">
                           📄 <span style={{ textDecoration: "underline" }}>{m.docName || "Document"}</span>
@@ -222,7 +249,7 @@ export default function Embassy() {
             </div>
 
             <div className="em-input-area">
-              <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={handleDoc} />
+              <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,image/*,video/*,audio/*" style={{ display: "none" }} onChange={handleDoc} />
               <button className="em-attach" onClick={() => fileRef.current?.click()} title="Send a document">📎</button>
               <textarea
                 className="em-input"
