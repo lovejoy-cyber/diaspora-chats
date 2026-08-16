@@ -61,8 +61,10 @@ const CSS = `
 .ms-t{font-size:9px;opacity:.65;margin-top:4px;display:block;text-align:right}
 .ms-tick.seen{color:#93C5FD}
 .ms-tools{display:flex;gap:3px;margin-bottom:2px;align-self:center}
-.ms-tool{background:none;border:none;cursor:pointer;font-size:12px;opacity:0;padding:3px;border-radius:5px;transition:opacity .15s}
-.ms-row:hover .ms-tool{opacity:.9}
+.ms-tool{background:rgba(255,255,255,.06);border:1px solid var(--border);cursor:pointer;font-size:12px;opacity:1;padding:4px 8px;border-radius:6px;transition:opacity .15s,background .15s;color:var(--text2);}
+.ms-tool:active{background:rgba(59,130,246,.15);}
+.ms-tool.ms-tool-delete{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.25);color:#f87171;}
+.ms-tool.ms-tool-delete:active{background:rgba(239,68,68,.25);}
 .ms-tool:hover{background:rgba(255,255,255,.1)}
 .ms-rx{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
 .ms-chip{background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:20px;padding:2px 7px;font-size:11px;cursor:pointer}
@@ -83,7 +85,7 @@ const CSS = `
 .ms-attach-btn{background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text2);width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:17px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s}
 .ms-attach-btn:hover{background:rgba(59,130,246,.15);color:var(--primary-light)}
 .ms-attach-btn.rec{background:rgba(239,68,68,.2);border-color:#ef4444;color:#fca5a5}
-.ms-send{padding:0;width:40px;height:40px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.ms-send{padding:0;width:44px;height:44px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:none;border-radius:50%;font-size:17px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .ms-send:disabled{opacity:.4;cursor:not-allowed}
 .ms-empty{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--text2)}
 .ms-empty-icon{font-size:42px;opacity:.5}
@@ -465,11 +467,24 @@ export default function Messages() {
       rec.ondataavailable = e => chunksRef.current.push(e.data);
       rec.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
-        stream.getTracks().forEach(t => t.stop());
+        // Explicit, unconditional release — runs before the upload attempt, so the mic
+        // indicator turns off immediately regardless of whether the upload below
+        // succeeds or fails. Also stops the recorder's own internal reference just in
+        // case the stream has more than one active consumer (a real cause of the
+        // Android green-dot indicator lagging behind a simple track.stop() call).
+        stream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
         mediaStreamRef.current = null;
         setSending(true);
-        try { const audioUrl = await uploadToCloudinary(blob, "video"); await sendMessage({ audioUrl, type: "audio", text: "" }); }
-        catch { alert("Voice message upload failed."); }
+        try {
+          const audioUrl = await uploadToCloudinary(blob, "video");
+          await sendMessage({ audioUrl, type: "audio", text: "" });
+        } catch (err) {
+          // Real fix: surface the ACTUAL upload error instead of a generic message —
+          // if this is a Cloudinary account restriction (same class of issue as the
+          // PDF 401 problem), this will show it directly instead of hiding it.
+          console.error("Voice message upload failed:", err);
+          alert("Voice message upload failed: " + (err?.message || "please try again."));
+        }
         setSending(false);
       };
       rec.start(); mediaRecRef.current = rec; setRecording(true);
@@ -692,7 +707,7 @@ export default function Messages() {
                             <button className="ms-tool" onClick={() => { setForwardingMsg(msg); setShowPicker(true); }} title="Forward">➦</button>
                             <button className="ms-tool" onClick={() => toggleStar(msg)} title={msg.starredBy?.includes(currentUser.uid) ? "Unstar" : "Star"}>{msg.starredBy?.includes(currentUser.uid) ? "⭐" : "☆"}</button>
                             {isMine && msg.type === "text" && <button className="ms-tool" onClick={() => startEdit(msg)} title="Edit">✏️</button>}
-                            {isMine && <button className="ms-tool" onClick={() => deleteMessage(msg.id)} title="Delete">🗑️</button>}
+                            {isMine && <button className="ms-tool ms-tool-delete" onClick={() => deleteMessage(msg.id)} title="Delete">🗑️ Delete</button>}
                           </div>
                         )}
                         {showRx === msg.id && !msg.deleted && (
@@ -789,7 +804,7 @@ export default function Messages() {
               )}
               <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhoto} />
               <input ref={videoFileRef} type="file" accept="video/*" style={{ display: "none" }} onChange={handleVideo} />
-              <input ref={docFileRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" style={{ display: "none" }} onChange={handleDoc} />
+              <input ref={docFileRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" style={{ display: "none" }} onChange={handleDoc} />
               <button className="ms-attach-btn" onClick={() => setShowAttach(!showAttach)} title="Attach">📎</button>
               <button
                 className={"ms-attach-btn" + (recording ? " rec" : "")}

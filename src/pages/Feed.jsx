@@ -240,7 +240,7 @@ export default function Feed() {
             onChange={e => { const f = e.target.files[0]; if (f) { setImg(f); setVideoF(null); setPrev(URL.createObjectURL(f)); } e.target.value = ""; }} />
           <input ref={videoRef} type="file" accept="video/*" style={{ display: "none" }}
             onChange={e => { const f = e.target.files[0]; if (f) { setVideoF(f); setImg(null); setPrev(URL.createObjectURL(f)); } e.target.value = ""; }} />
-          <input ref={docRef2} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" style={{ display: "none" }}
+          <input ref={docRef2} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" style={{ display: "none" }}
             onChange={e => { setDocF(e.target.files[0] || null); e.target.value = ""; }} />
           <button className="fd-post" onClick={submit} disabled={posting || (!text.trim() && !img && !videoF && !docF)}>
             {posting ? "Posting..." : "Post ✈️"}

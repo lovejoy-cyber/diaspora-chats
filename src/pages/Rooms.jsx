@@ -7,6 +7,8 @@ import { COUNTRY_ROOMS, INTEREST_ROOMS, CONTINENTS } from "../lib/rooms";
 import { cleanText as cleanTextHelper, uploadToCloudinary } from "../lib/helpers";
 import Lightbox from "../components/Lightbox";
 
+const EMOJIS = ["👍","❤️","😂","😮","😢","🙏","🔥","💯"];
+
 const PRESET_ROOMS = [
   ...INTEREST_ROOMS.map(r => ({ id: r.id, name: r.name, desc: r.desc, type: r.type, country: null, color: r.color })),
   ...COUNTRY_ROOMS.map(r => ({
@@ -66,7 +68,7 @@ const STYLE = `
 .room-input-area{padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--bg-card);flex-shrink:0;}
 .room-input{flex:1;padding:10px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:13px;outline:none;font-family:inherit;}
 .room-input:focus{border-color:var(--primary);}
-.room-send-btn{padding:10px 16px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:white;border:none;border-radius:12px;font-size:14px;cursor:pointer;}
+.room-send-btn{padding:11px 17px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:white;border:none;border-radius:12px;font-size:15px;cursor:pointer;min-width:44px;min-height:44px;}
 .room-send-btn:disabled{opacity:0.4;cursor:not-allowed;}
 .join-overlay{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:30px;}
 .join-overlay-icon{font-size:44px;}
@@ -88,6 +90,7 @@ export default function Rooms() {
   const [search, setSearch] = useState("");
   const [activeRoom, setActiveRoom] = useState(null);
   const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [showRoomRx, setShowRoomRx] = useState(null);
   const [messages, setMessages] = useState([]);
   const [bannedFromActiveRoom, setBannedFromActiveRoom] = useState(false);
   const [showRoomMembers, setShowRoomMembers] = useState(false);
@@ -275,11 +278,16 @@ export default function Rooms() {
       rec.ondataavailable = e => roomChunksRef.current.push(e.data);
       rec.onstop = async () => {
         const blob = new Blob(roomChunksRef.current, { type: rec.mimeType || "audio/webm" });
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
         roomMediaStreamRef.current = null;
         setRoomSending(true);
-        try { const audioUrl = await uploadToCloudinary(blob, "video"); await sendMessage({ audioUrl, type: "audio" }); }
-        catch { alert("Voice message upload failed."); }
+        try {
+          const audioUrl = await uploadToCloudinary(blob, "video");
+          await sendMessage({ audioUrl, type: "audio" });
+        } catch (err) {
+          console.error("Voice message upload failed:", err);
+          alert("Voice message upload failed: " + (err?.message || "please try again."));
+        }
         setRoomSending(false);
       };
       rec.start(); roomMediaRecRef.current = rec; setRoomRecording(true);
@@ -329,6 +337,25 @@ export default function Rooms() {
     if (window.confirm("Delete this message?")) {
       await updateDoc(doc(db, "rooms", activeRoom.id, "messages", msgId), { deleted: true, text: "Message removed by moderator" });
     }
+  };
+
+  // Real, new feature — emoji reactions on room messages, matching what already existed
+  // in 1-on-1 Messages. Toggles the current user's uid in/out of the array for that
+  // specific emoji on that specific message.
+  const toggleRoomReaction = async (msgId, emoji) => {
+    if (!activeRoom) return;
+    const msgRef = doc(db, "rooms", activeRoom.id, "messages", msgId);
+    const msg = messages.find(m => m.id === msgId);
+    const reactions = { ...(msg?.reactions || {}) };
+    const current = reactions[emoji] || [];
+    if (current.includes(currentUser.uid)) {
+      reactions[emoji] = current.filter(uid => uid !== currentUser.uid);
+      if (reactions[emoji].length === 0) delete reactions[emoji];
+    } else {
+      reactions[emoji] = [...current, currentUser.uid];
+    }
+    await updateDoc(msgRef, { reactions });
+    setShowRoomRx(null);
   };
 
   const createRoom = async () => {
@@ -528,14 +555,37 @@ export default function Rooms() {
                           <audio controls src={msg.audioUrl} style={{ maxWidth: 220, height: 34 }} />
                         )}
                         {msg.text}
+                        {msg.reactions && Object.keys(msg.reactions).some(k => msg.reactions[k].length > 0) && (
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+                            {Object.entries(msg.reactions).filter(([, uids]) => uids.length > 0).map(([emoji, uids]) => (
+                              <span
+                                key={emoji}
+                                onClick={() => toggleRoomReaction(msg.id, emoji)}
+                                style={{ background: uids.includes(currentUser.uid) ? "rgba(59,130,246,.2)" : "rgba(255,255,255,.08)", border: "1px solid " + (uids.includes(currentUser.uid) ? "var(--primary)" : "var(--border)"), borderRadius: 12, padding: "2px 7px", fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3 }}
+                              >
+                                {emoji} <span style={{ fontSize: 10, opacity: .8 }}>{uids.length}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
+                      {showRoomRx === msg.id && !msg.deleted && (
+                        <div style={{ display: "flex", gap: 4, background: "var(--bg-card2)", border: "1px solid var(--border)", borderRadius: 20, padding: "4px 8px", marginTop: 4, width: "fit-content" }}>
+                          {EMOJIS.map(e => (
+                            <span key={e} onClick={() => toggleRoomReaction(msg.id, e)} style={{ cursor: "pointer", fontSize: 17, padding: "2px 3px" }}>{e}</span>
+                          ))}
+                        </div>
+                      )}
                       <div className="room-msg-time" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         {formatTime(msg.createdAt)}
+                        {!msg.deleted && (
+                          <button onClick={() => setShowRoomRx(showRoomRx === msg.id ? null : msg.id)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 13 }}>😊</button>
+                        )}
                         {canMod && !msg.deleted && (
                           <button onClick={() => pinMessage(msg.id, msg.pinned)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 11 }}>{msg.pinned ? "Unpin" : "📌 Pin"}</button>
                         )}
                         {(isMine || canMod) && !msg.deleted && (
-                          <button onClick={() => deleteRoomMessage(msg.id)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 11 }}>🗑️</button>
+                          <button onClick={() => deleteRoomMessage(msg.id)} style={{ background: "rgba(239,68,68,.12)", border: "1px solid rgba(239,68,68,.25)", color: "#f87171", cursor: "pointer", fontSize: 13, padding: "3px 8px", borderRadius: 6, fontWeight: 600 }}>🗑️ Delete</button>
                         )}
                       </div>
                     </div>
@@ -558,7 +608,7 @@ export default function Rooms() {
                 <>
                   <input ref={roomPhotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleRoomPhoto} />
                   <input ref={roomVideoRef} type="file" accept="video/*" style={{ display: "none" }} onChange={handleRoomVideo} />
-                  <input ref={roomDocRef} type="file" style={{ display: "none" }} onChange={handleRoomDoc} />
+                  <input ref={roomDocRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ display: "none" }} onChange={handleRoomDoc} />
                   <div style={{ position: "relative" }}>
                     <button className="room-send-btn" style={{ background: "rgba(255,255,255,.08)" }} onClick={() => setShowRoomAttach(!showRoomAttach)} disabled={roomSending}>📎</button>
                     {showRoomAttach && (
