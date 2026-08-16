@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { COUNTRY_ROOMS, INTEREST_ROOMS, CONTINENTS } from "../lib/rooms";
 import { cleanText as cleanTextHelper, uploadToCloudinary } from "../lib/helpers";
+import Lightbox from "../components/Lightbox";
 
 const PRESET_ROOMS = [
   ...INTEREST_ROOMS.map(r => ({ id: r.id, name: r.name, desc: r.desc, type: r.type, country: null, color: r.color })),
@@ -86,6 +87,7 @@ export default function Rooms() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [activeRoom, setActiveRoom] = useState(null);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
   const [messages, setMessages] = useState([]);
   const [bannedFromActiveRoom, setBannedFromActiveRoom] = useState(false);
   const [showRoomMembers, setShowRoomMembers] = useState(false);
@@ -512,7 +514,7 @@ export default function Rooms() {
                       <div className={"room-msg-bubble"+(isMine?" mine":" theirs")}>
                         {msg.pinned && !msg.deleted && <div style={{ fontSize: 10, opacity: .75, marginBottom: 3 }}>📌 Pinned</div>}
                         {msg.type === "image" && msg.imageUrl && !msg.deleted && (
-                          <img src={msg.imageUrl} alt="" style={{ maxWidth: 220, borderRadius: 10, display: "block", cursor: "pointer" }} onClick={() => window.open(msg.imageUrl, "_blank")} />
+                          <img src={msg.imageUrl} alt="" style={{ maxWidth: 220, borderRadius: 10, display: "block", cursor: "pointer" }} onClick={() => setLightboxSrc(msg.imageUrl)} />
                         )}
                         {msg.type === "video" && msg.videoUrl && !msg.deleted && (
                           <video src={msg.videoUrl} controls playsInline style={{ maxWidth: 260, borderRadius: 10, display: "block" }} />
@@ -530,10 +532,10 @@ export default function Rooms() {
                       <div className="room-msg-time" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         {formatTime(msg.createdAt)}
                         {canMod && !msg.deleted && (
-                          <>
-                            <button onClick={() => pinMessage(msg.id, msg.pinned)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 11 }}>{msg.pinned ? "Unpin" : "📌 Pin"}</button>
-                            <button onClick={() => deleteRoomMessage(msg.id)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 11 }}>🗑️</button>
-                          </>
+                          <button onClick={() => pinMessage(msg.id, msg.pinned)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 11 }}>{msg.pinned ? "Unpin" : "📌 Pin"}</button>
+                        )}
+                        {(isMine || canMod) && !msg.deleted && (
+                          <button onClick={() => deleteRoomMessage(msg.id)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 11 }}>🗑️</button>
                         )}
                       </div>
                     </div>
@@ -700,6 +702,7 @@ export default function Rooms() {
           </div>
         </div>
       )}
+      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
     </div>
   );
 }

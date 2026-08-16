@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, getDocs, setDoc } from "firebase/firestore";
 import { db } from "../firebase/config";
 import { useAuth } from "../contexts/AuthContext";
@@ -57,6 +58,7 @@ const CSS = `
 function threadIdFor(uid) { return "embassy_" + uid; }
 
 export default function Embassy() {
+  const navigate = useNavigate();
   const { currentUser, userProfile } = useAuth();
   const isEmbassyStaff = userProfile?.role === "embassy" || userProfile?.role === "admin";
   const [threads, setThreads] = useState([]);
@@ -69,6 +71,7 @@ export default function Embassy() {
   const [showSidebar, setShowSidebar] = useState(isEmbassyStaff);
   const bottomRef = useRef(null);
   const fileRef = useRef(null);
+  const docFileRef = useRef(null);
 
   useEffect(() => {
     if (!document.getElementById("em-css")) {
@@ -98,6 +101,17 @@ export default function Embassy() {
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
     });
   }, [selectedUid]);
+
+  // Real fix — Embassy had zero delete capability anywhere, unlike every other part
+  // of the app. Someone can delete their own message; Embassy staff can also delete
+  // any message in a thread they're handling.
+  const deleteEmbassyMessage = async (msgId) => {
+    if (!selectedUid) return;
+    const tid = threadIdFor(selectedUid);
+    if (window.confirm("Delete this message?")) {
+      await updateDoc(doc(db, "embassyThreads", tid, "messages", msgId), { deleted: true, text: "Message removed", imageUrl: null, videoUrl: null, audioUrl: null, docUrl: null });
+    }
+  };
 
   const send = async (overrides) => {
     if (!selectedUid) return;
@@ -199,6 +213,18 @@ export default function Embassy() {
                 <h3>{isEmbassyStaff ? selectedName : "Embassy"}</h3>
                 <p>{isEmbassyStaff ? "Private channel — visible only to Embassy staff" : "Send documents, ask questions, report issues — private and secure"}</p>
               </div>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => navigate("/dashboard/calls?call=" + selectedUid + "&type=voice")}
+                  title="Voice call"
+                  style={{ background: "rgba(16,185,129,.12)", border: "1px solid rgba(16,185,129,.25)", color: "#34d399", width: 34, height: 34, borderRadius: "50%", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}
+                >📞</button>
+                <button
+                  onClick={() => navigate("/dashboard/calls?call=" + selectedUid + "&type=video")}
+                  title="Video call"
+                  style={{ background: "rgba(59,130,246,.12)", border: "1px solid rgba(59,130,246,.25)", color: "var(--primary-light)", width: 34, height: 34, borderRadius: "50%", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}
+                >📹</button>
+              </div>
             </div>
 
             {documents.length > 0 && (
@@ -221,26 +247,32 @@ export default function Embassy() {
               )}
               {messages.map(m => {
                 const mine = isEmbassyStaff ? m.isFromEmbassy : !m.isFromEmbassy;
+                const isOwnMessage = m.senderId === currentUser.uid;
                 return (
                   <div key={m.id} className={"em-msg" + (mine ? " mine" : "")}>
                     <div className={"em-bubble" + (mine ? " mine" : " theirs")}>
                       {!mine && <div style={{ fontSize: 10.5, fontWeight: 700, opacity: .8, marginBottom: 3 }}>{m.isFromEmbassy ? "🏛️ Embassy" : selectedName}</div>}
-                      {m.imageUrl && (
+                      {!m.deleted && m.imageUrl && (
                         <img src={m.imageUrl} alt="" style={{ maxWidth: 220, borderRadius: 10, display: "block", cursor: "pointer", marginBottom: m.text ? 6 : 0 }} onClick={() => window.open(m.imageUrl, "_blank")} />
                       )}
-                      {m.videoUrl && (
+                      {!m.deleted && m.videoUrl && (
                         <video src={m.videoUrl} controls playsInline style={{ maxWidth: 260, borderRadius: 10, display: "block", marginBottom: m.text ? 6 : 0 }} />
                       )}
-                      {m.audioUrl && (
+                      {!m.deleted && m.audioUrl && (
                         <audio controls src={m.audioUrl} style={{ maxWidth: 220, height: 34, marginBottom: m.text ? 6 : 0 }} />
                       )}
-                      {m.docUrl && (
+                      {!m.deleted && m.docUrl && (
                         <a href={m.docUrl} target="_blank" rel="noreferrer" className="em-doc">
                           📄 <span style={{ textDecoration: "underline" }}>{m.docName || "Document"}</span>
                         </a>
                       )}
                       {m.text && <div>{m.text}</div>}
-                      <span className="em-time">{clockTime(m.createdAt)}</span>
+                      <span className="em-time">
+                        {clockTime(m.createdAt)}
+                        {(isOwnMessage || isEmbassyStaff) && !m.deleted && (
+                          <button onClick={() => deleteEmbassyMessage(m.id)} style={{ marginLeft: 8, background: "none", border: "none", color: "inherit", opacity: .7, cursor: "pointer", fontSize: 10.5 }}>🗑️</button>
+                        )}
+                      </span>
                     </div>
                   </div>
                 );
@@ -249,8 +281,10 @@ export default function Embassy() {
             </div>
 
             <div className="em-input-area">
-              <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,image/*,video/*,audio/*" style={{ display: "none" }} onChange={handleDoc} />
-              <button className="em-attach" onClick={() => fileRef.current?.click()} title="Send a document">📎</button>
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleDoc} />
+              <input ref={docFileRef} type="file" accept=".pdf,.doc,.docx,video/*,audio/*" style={{ display: "none" }} onChange={handleDoc} />
+              <button className="em-attach" onClick={() => fileRef.current?.click()} title="Send a photo">📷</button>
+              <button className="em-attach" onClick={() => docFileRef.current?.click()} title="Send a document, video, or audio">📎</button>
               <textarea
                 className="em-input"
                 placeholder={isEmbassyStaff ? "Reply to " + selectedName + "..." : "Message the Embassy..."}
