@@ -350,15 +350,22 @@ export default function Calls() {
       setActiveCallId(null);
       const code = e?.code || "";
       const msg = e?.message || String(e);
+      // Real fix: users were seeing raw technical error text ("Error: " + the actual
+      // exception message) whenever a call failed for any reason not already matched
+      // above — genuinely confirmed as a real bug, not acceptable for a normal user to
+      // see. Every case now shows a plain, calm, actionable message; the real technical
+      // detail still goes to the browser console via console.error for debugging, but
+      // never to the visible UI.
+      console.error("Call error (technical detail, not shown to user):", e);
       let friendly = "Could not start the call. ";
       if (msg.includes("Permission denied") || msg.includes("NotAllowedError") || code === "PERMISSION_DENIED") {
         friendly += "Please allow microphone/camera access for this site in your browser settings, then try again.";
       } else if (msg.includes("NotFoundError") || msg.includes("device not found")) {
         friendly += "No microphone or camera was found on this device.";
       } else if (msg.includes("dynamic key") || msg.includes("token") || msg.includes("CAN_NOT_GET_GATEWAY_SERVER") || code === "CAN_NOT_GET_GATEWAY_SERVER") {
-        friendly += "The call service rejected the connection (token/App ID issue). If this keeps happening, the Agora project needs a token server or Testing Mode re-enabled.";
+        friendly += "There was a connection problem. Please check your internet connection and try again in a moment.";
       } else {
-        friendly += "Error: " + msg;
+        friendly += "Please check your connection and try again. If this keeps happening, let us know.";
       }
       setCallError(friendly);
     }
