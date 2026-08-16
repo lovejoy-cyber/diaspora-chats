@@ -3,7 +3,7 @@
 // and can't be reliably auto-translated anyway). This is intentionally small and honest
 // about its limits: switching language changes the app's own UI text, not user content.
 
-export const LANGUAGES = { en: "English", fr: "Français" };
+export const LANGUAGES = { en: "English", fr: "Français", es: "Español" };
 
 const DICT = {
   en: {
@@ -47,6 +47,27 @@ const DICT = {
     verified: "Vérifié", online: "En ligne", offline: "Hors ligne", typing: "en train d'écrire...",
     yes: "Oui", no: "Non", ok: "OK", close: "Fermer", delete: "Supprimer", edit: "Modifier",
     report: "Signaler", block: "Bloquer", mute: "Muet", archive: "Archiver",
+  },
+  es: {
+    feed: "Inicio", messages: "Mensajes", rooms: "Salas y Grupos", market: "Mercado",
+    embassy: "Embajada", calls: "Llamadas", people: "Personas", myProfile: "Mi Perfil",
+    reels: "Videos", assistant: "Asistente",
+    signIn: "Iniciar sesión", signOut: "Cerrar sesión", createAccount: "Crear cuenta",
+    email: "Correo electrónico", password: "Contraseña", fullName: "Nombre completo",
+    save: "Guardar", cancel: "Cancelar", post: "Publicar", send: "Enviar", search: "Buscar",
+    settings: "Configuración", editProfile: "Editar perfil", welcomeBack: "Bienvenido de nuevo",
+    home: "Inicio", chat: "Chat", darkMode: "Modo oscuro", lightMode: "Modo claro",
+    notifications: "Notificaciones", noNotificationsYet: "Aún no hay notificaciones",
+    posts: "Publicaciones", newMessage: "Nuevo mensaje", searchConversations: "Buscar conversaciones...",
+    signInToAccount: "Inicia sesión en tu cuenta", forgotPassword: "¿Olvidaste tu contraseña?",
+    newHere: "¿Nuevo aquí?", loading: "Cargando...", tapToChat: "Toca para chatear",
+    everyone: "Todos", following: "Siguiendo", official: "Oficial", saved: "Guardados",
+    whatsOnYourMind: "¿Qué estás pensando", photo: "Foto", video: "Video", document: "Documento",
+    profile: "Perfil", createGroup: "Crear grupo", joinCall: "Unirse a llamada grupal",
+    security: "Seguridad", privileges: "Privilegios", language: "Idioma",
+    verified: "Verificado", online: "En línea", offline: "Desconectado", typing: "escribiendo...",
+    yes: "Sí", no: "No", ok: "OK", close: "Cerrar", delete: "Eliminar", edit: "Editar",
+    report: "Reportar", block: "Bloquear", mute: "Silenciar", archive: "Archivar",
   },
 };
 

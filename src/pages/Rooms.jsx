@@ -217,6 +217,13 @@ export default function Rooms() {
   // genuinely missing from Rooms entirely before now, not a bug — new functionality.
   const [showRoomAttach, setShowRoomAttach] = useState(false);
   const [roomSending, setRoomSending] = useState(false);
+
+  // Real fix: the attach menu (📎) stayed open when switching rooms, since nothing ever
+  // reset showRoomAttach when activeRoom changed — confirmed by checking every place
+  // setActiveRoom is called, none of them touched the attach menu state.
+  useEffect(() => {
+    setShowRoomAttach(false);
+  }, [activeRoom?.id]);
   const [roomRecording, setRoomRecording] = useState(false);
   const roomMediaRecRef = useRef(null);
   const roomChunksRef = useRef([]);
@@ -251,15 +258,23 @@ export default function Rooms() {
     setRoomSending(false); e.target.value = "";
   };
 
+  const roomMediaStreamRef = useRef(null);
+
   const startRoomRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
+      roomMediaStreamRef.current = stream;
+      // Same real fix as Messages.jsx — explicit mimeType instead of relying on the
+      // browser's unpredictable default, and tagging the resulting Blob with what was
+      // actually recorded rather than a hardcoded guess.
+      const preferredType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+      const rec = preferredType ? new MediaRecorder(stream, { mimeType: preferredType }) : new MediaRecorder(stream);
       roomChunksRef.current = [];
       rec.ondataavailable = e => roomChunksRef.current.push(e.data);
       rec.onstop = async () => {
-        const blob = new Blob(roomChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(roomChunksRef.current, { type: rec.mimeType || "audio/webm" });
         stream.getTracks().forEach(t => t.stop());
+        roomMediaStreamRef.current = null;
         setRoomSending(true);
         try { const audioUrl = await uploadToCloudinary(blob, "video"); await sendMessage({ audioUrl, type: "audio" }); }
         catch { alert("Voice message upload failed."); }
@@ -269,6 +284,23 @@ export default function Rooms() {
     } catch { alert("Microphone permission denied."); }
   };
   const stopRoomRecording = () => { if (roomMediaRecRef.current) { roomMediaRecRef.current.stop(); setRoomRecording(false); } };
+
+  // Same real fix as Messages.jsx and Calls.jsx — releases the mic if the tab closes
+  // mid-recording, before stopRoomRecording is ever called.
+  useEffect(() => {
+    const releaseMic = () => {
+      if (roomMediaStreamRef.current) {
+        roomMediaStreamRef.current.getTracks().forEach(t => t.stop());
+        roomMediaStreamRef.current = null;
+      }
+    };
+    window.addEventListener("pagehide", releaseMic);
+    window.addEventListener("beforeunload", releaseMic);
+    return () => {
+      window.removeEventListener("pagehide", releaseMic);
+      window.removeEventListener("beforeunload", releaseMic);
+    };
+  }, []);
 
   // Room-level ban list — the actual "add/remove someone from the group" power a Governor
   // needs, since preset country/city rooms don't have a fixed member list the way custom
@@ -326,7 +358,19 @@ export default function Rooms() {
   };
 
   const allPreset = PRESET_ROOMS.filter(r=>r.name.toLowerCase().includes(search.toLowerCase())||r.desc.toLowerCase().includes(search.toLowerCase()));
-  const allCustom = customRooms.filter(r=>r.name.toLowerCase().includes(search.toLowerCase()));
+  // Real fix: rooms someone created now sort to the top of their own custom rooms list —
+  // previously there was no sorting at all, rooms just showed in whatever order Firestore
+  // happened to return them.
+  const allCustom = customRooms
+    .filter(r=>r.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const aMine = a.creatorId === currentUser.uid ? 1 : 0;
+      const bMine = b.creatorId === currentUser.uid ? 1 : 0;
+      if (aMine !== bMine) return bMine - aMine; // mine first
+      const ta = a.createdAt?.toDate?.()?.getTime?.() || 0;
+      const tb = b.createdAt?.toDate?.()?.getTime?.() || 0;
+      return tb - ta; // then most recent first
+    });
 
   // Handles arriving via a room invite link (?join=roomId) — finds the matching room
   // (preset or custom) and auto-selects it, so the link genuinely drops someone straight

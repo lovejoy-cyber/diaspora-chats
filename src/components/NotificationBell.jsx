@@ -8,7 +8,8 @@ import { playNotificationSound } from "../lib/sounds";
 
 const CSS = `
 .nb-wrap{position:relative}
-.nb-btn{background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text2);padding:7px 10px;border-radius:10px;font-size:17px;cursor:pointer;transition:all .15s;position:relative;line-height:1}
+.nb-btn{background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text2);padding:7px 10px;border-radius:10px;font-size:17px;cursor:pointer;transition:transform .1s ease,background .1s ease,box-shadow .1s ease;position:relative;line-height:1}
+.nb-btn:active{transform:scale(.82);background:rgba(59,130,246,.28);box-shadow:0 0 0 4px rgba(59,130,246,.15);}
 .nb-btn:hover{background:rgba(59,130,246,.14);border-color:var(--primary)}
 .nb-btn.alert{animation:nbAlert 1.1s infinite}
 @keyframes nbAlert{0%{background:rgba(239,68,68,.18);border-color:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{background:rgba(245,158,11,.22);border-color:#f59e0b;box-shadow:0 0 0 6px rgba(239,68,68,0)}100%{background:rgba(239,68,68,.18);border-color:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,0)}}

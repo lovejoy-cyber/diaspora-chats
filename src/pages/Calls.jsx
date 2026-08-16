@@ -75,10 +75,8 @@ export default function Calls() {
   const clientRef = useRef(null);
   const tracksRef = useRef([]);
 
-  // Safety net: if this page unmounts while still in a call (user navigates away, closes
-  // tab, etc.) release the camera/mic immediately rather than leaving them held until the
-  // browser eventually garbage-collects — this is what was causing the camera light to
-  // stay on after a call ended.
+  // Safety net: if this page unmounts while still in a call (user navigates away within
+  // the app) release the camera/mic immediately.
   useEffect(() => {
     return () => {
       tracksRef.current.forEach(t => {
@@ -91,6 +89,34 @@ export default function Calls() {
       if (clientRef.current) {
         try { clientRef.current.leave(); } catch (e) {}
       }
+    };
+  }, []);
+
+  // Real fix for "mic still held after closing the browser tab/window": a React
+  // useEffect cleanup function (above) ONLY fires when the component unmounts within
+  // the same page session — it does NOT fire when the browser tab/window is actually
+  // closed or the page is unloaded. That's a genuinely different event, and this was
+  // the real gap — the previous comment claiming the effect above handled "closes tab"
+  // was incorrect. "pagehide" is the reliable browser event for tab close / navigation
+  // away / refresh, firing even on mobile where "beforeunload" is unreliable.
+  useEffect(() => {
+    const releaseMedia = () => {
+      tracksRef.current.forEach(t => {
+        try {
+          const mediaTrack = t.getMediaStreamTrack?.();
+          if (mediaTrack) mediaTrack.stop();
+          t.stop(); t.close();
+        } catch (e) {}
+      });
+      if (clientRef.current) {
+        try { clientRef.current.leave(); } catch (e) {}
+      }
+    };
+    window.addEventListener("pagehide", releaseMedia);
+    window.addEventListener("beforeunload", releaseMedia);
+    return () => {
+      window.removeEventListener("pagehide", releaseMedia);
+      window.removeEventListener("beforeunload", releaseMedia);
     };
   }, []);
   const timerRef = useRef(null);

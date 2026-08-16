@@ -154,14 +154,23 @@ export default function Messages() {
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [showMsgSearch, setShowMsgSearch] = useState(false);
+
   const [msgSearchQuery, setMsgSearchQuery] = useState("");
   const bottomRef = useRef(null);
   const mediaRecRef = useRef(null);
+  const mediaStreamRef = useRef(null);
   const chunksRef = useRef([]);
   const typingTimeoutRef = useRef(null);
   const fileRef = useRef(null);
   const videoFileRef = useRef(null);
   const docFileRef = useRef(null);
+
+  // Real fix: attach menu (📎) stayed open when switching conversations, same root
+  // cause as the Rooms.jsx version — nothing ever reset showAttach when the active
+  // conversation changed.
+  useEffect(() => {
+    setShowAttach(false);
+  }, [active?.id]);
 
   useEffect(() => {
     if (!document.getElementById("ms-css")) {
@@ -441,12 +450,23 @@ export default function Messages() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
+      mediaStreamRef.current = stream;
+      // Real fix for "voice messages refusing to upload": MediaRecorder was created
+      // with no explicit mimeType, so it used the browser's own default format (which
+      // varies — could be webm, ogg, mp4 depending on browser/device), but the code
+      // below hardcoded the resulting Blob's type as "audio/webm" regardless of what
+      // was actually recorded. That mismatch between the claimed and actual format is
+      // exactly the kind of thing that can cause an upload to silently fail or produce
+      // an unplayable file. Now explicitly requests webm where supported, and falls
+      // back to whatever the browser actually used, tagging the Blob correctly either way.
+      const preferredType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+      const rec = preferredType ? new MediaRecorder(stream, { mimeType: preferredType }) : new MediaRecorder(stream);
       chunksRef.current = [];
       rec.ondataavailable = e => chunksRef.current.push(e.data);
       rec.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
         stream.getTracks().forEach(t => t.stop());
+        mediaStreamRef.current = null;
         setSending(true);
         try { const audioUrl = await uploadToCloudinary(blob, "video"); await sendMessage({ audioUrl, type: "audio", text: "" }); }
         catch { alert("Voice message upload failed."); }
@@ -456,6 +476,25 @@ export default function Messages() {
     } catch { alert("Microphone permission denied."); }
   };
   const stopRecording = () => { if (mediaRecRef.current) { mediaRecRef.current.stop(); setRecording(false); } };
+
+  // Real fix: if the tab/browser closes WHILE actively recording (before stopRecording
+  // is ever called), the mic stream above would never get released — this is exactly
+  // "mic still taken after closing the site." pagehide is the reliable event for this,
+  // including on mobile where beforeunload is unreliable.
+  useEffect(() => {
+    const releaseMic = () => {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(t => t.stop());
+        mediaStreamRef.current = null;
+      }
+    };
+    window.addEventListener("pagehide", releaseMic);
+    window.addEventListener("beforeunload", releaseMic);
+    return () => {
+      window.removeEventListener("pagehide", releaseMic);
+      window.removeEventListener("beforeunload", releaseMic);
+    };
+  }, []);
 
   const deleteMessage = async id => {
     await updateDoc(doc(db, "conversations", active.id, "messages", id), { deleted: true, text: "This message was deleted", imageUrl: null, audioUrl: null, docUrl: null });

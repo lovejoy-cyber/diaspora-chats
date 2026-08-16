@@ -3,14 +3,75 @@ export const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 export async function uploadToCloudinary(file, resourceType) {
   const fd = new FormData();
-  fd.append("file", file);
+  // Real speed fix: compress images before upload — a typical phone photo (3-8MB) drops
+  // to a few hundred KB with no visible quality loss for chat/feed purposes, which is
+  // the actual cause of "slow to send/open" for photos, not a code inefficiency. Videos
+  // are NOT compressed here — genuine video compression in-browser needs a heavier
+  // library (like ffmpeg.wasm) and is a separate, bigger task, being honest about that
+  // rather than pretending this covers video too.
+  const uploadFile = resourceType === "image" ? await compressImage(file) : file;
+  fd.append("file", uploadFile);
   fd.append("upload_preset", UPLOAD_PRESET);
   const type = resourceType || "image";
   const url = "https://api.cloudinary.com/v1_1/" + CLOUD_NAME + "/" + type + "/upload";
   const res = await fetch(url, { method: "POST", body: fd });
   if (!res.ok) throw new Error("Upload failed");
   const data = await res.json();
+  // Real fix for documents failing to open correctly: Cloudinary's "raw" resource type
+  // sometimes returns a secure_url with no file extension, or one that doesn't match
+  // the original file — browsers then can't tell what to do with the link (no extension
+  // to hint at PDF vs Word vs anything else), which can show as an error/blank page
+  // instead of opening the file. This explicitly appends the real original extension
+  // if the returned URL doesn't already end with one, so the browser always has a
+  // correct hint about what kind of file it's opening.
+  if (type === "raw" && file?.name) {
+    const originalExt = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "";
+    const urlHasExt = /\.[a-zA-Z0-9]{2,5}$/.test(data.secure_url);
+    if (originalExt && !urlHasExt) {
+      return data.secure_url + "." + originalExt;
+    }
+  }
   return data.secure_url;
+}
+
+// Resizes an image to a sane max dimension and re-encodes it as JPEG at a reasonable
+// quality — genuinely fast (native browser Canvas API, no library), and cuts file size
+// dramatically for typical phone photos. Falls back to the original file untouched if
+// compression fails for any reason (e.g. an unusual image format), so this can never
+// block someone from sending a photo even in an edge case.
+function compressImage(file, maxDimension = 1600, quality = 0.75) {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith("image/") || file.type === "image/gif") {
+      resolve(file); // GIFs need to stay animated — compressing would freeze them to one frame
+      return;
+    }
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) { height = Math.round(height * (maxDimension / width)); width = maxDimension; }
+        else { width = Math.round(width * (maxDimension / height)); height = maxDimension; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        if (!blob) { resolve(file); return; }
+        // Only use the compressed version if it's actually smaller — for a small image
+        // that was already tiny, compression overhead could theoretically be larger.
+        if (blob.size < file.size) {
+          resolve(new File([blob], file.name, { type: "image/jpeg" }));
+        } else {
+          resolve(file);
+        }
+      }, "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
+    img.src = objectUrl;
+  });
 }
 
 const BANNED = ["fuck","shit","bitch","asshole","nigger","nigga","whore","cunt","bastard","retard","faggot","slut","rape","kill yourself","kys"];
