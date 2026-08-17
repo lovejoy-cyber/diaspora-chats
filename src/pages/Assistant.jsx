@@ -77,10 +77,17 @@ export default function Assistant() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: content, history: messages }),
       });
-      if (!res.ok) throw new Error("Assistant service returned " + res.status);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || ("Assistant service returned " + res.status));
+      }
       const data = await res.json();
       setMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
     } catch (e) {
+      // Real fix: log the ACTUAL error so it's visible in the console for debugging
+      // (e.g. the real Groq error message now returned by the function), while still
+      // showing the person a calm, non-technical message on screen.
+      console.error("Assistant error (technical detail):", e);
       setError("Could not reach the assistant. Please try again in a moment.");
     }
     setLoading(false);

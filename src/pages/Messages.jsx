@@ -474,6 +474,16 @@ export default function Messages() {
         // Android green-dot indicator lagging behind a simple track.stop() call).
         stream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
         mediaStreamRef.current = null;
+        // Real safety check: if start/stop fired almost instantly (the old hold-based
+        // touch events could race and stop before any real audio was captured), the
+        // blob would be empty or near-empty, and Cloudinary would legitimately reject
+        // it as invalid — showing as "upload failed" with no obvious cause. Catch this
+        // before even attempting the upload, with a clear, honest message instead.
+        if (blob.size < 1000) {
+          alert("Recording was too short to send. Please tap once to start, then tap again to stop.");
+          setRecording(false);
+          return;
+        }
         setSending(true);
         try {
           const audioUrl = await uploadToCloudinary(blob, "video");
@@ -490,7 +500,13 @@ export default function Messages() {
       rec.start(); mediaRecRef.current = rec; setRecording(true);
     } catch { alert("Microphone permission denied."); }
   };
-  const stopRecording = () => { if (mediaRecRef.current) { mediaRecRef.current.stop(); setRecording(false); } };
+  const stopRecording = () => {
+    // Same real defensive fix as Rooms.jsx.
+    if (mediaRecRef.current && mediaRecRef.current.state !== "inactive") {
+      mediaRecRef.current.stop();
+    }
+    setRecording(false);
+  };
 
   // Real fix: if the tab/browser closes WHILE actively recording (before stopRecording
   // is ever called), the mic stream above would never get released — this is exactly
@@ -808,10 +824,10 @@ export default function Messages() {
               <button className="ms-attach-btn" onClick={() => setShowAttach(!showAttach)} title="Attach">📎</button>
               <button
                 className={"ms-attach-btn" + (recording ? " rec" : "")}
-                onMouseDown={startRecording} onMouseUp={stopRecording}
-                onTouchStart={startRecording} onTouchEnd={stopRecording}
-                title="Hold to record voice message"
-              >{recording ? "🔴" : "🎙️"}</button>
+                onClick={() => { if (recording) stopRecording(); else startRecording(); }}
+                disabled={sending}
+                title={recording ? "Tap to stop and send" : "Tap to record a voice message"}
+              >{sending ? "…" : recording ? "🔴" : "🎙️"}</button>
               <textarea className="ms-input" placeholder="Type a message..." value={text} onChange={e => handleTyping(e.target.value)} onKeyDown={handleKey} rows={1} />
               <button className="ms-send" onClick={handleSend} disabled={!text.trim() || sending}>➤</button>
             </div>

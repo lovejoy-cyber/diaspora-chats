@@ -280,6 +280,14 @@ export default function Rooms() {
         const blob = new Blob(roomChunksRef.current, { type: rec.mimeType || "audio/webm" });
         stream.getTracks().forEach(t => { t.stop(); t.enabled = false; });
         roomMediaStreamRef.current = null;
+        // Same real safety check as Messages.jsx — catches an empty/near-empty
+        // recording (a real risk from the old hold-based touch events racing) before
+        // even attempting the upload.
+        if (blob.size < 1000) {
+          alert("Recording was too short to send. Please tap once to start, then tap again to stop.");
+          setRoomRecording(false);
+          return;
+        }
         setRoomSending(true);
         try {
           const audioUrl = await uploadToCloudinary(blob, "video");
@@ -293,7 +301,18 @@ export default function Rooms() {
       rec.start(); roomMediaRecRef.current = rec; setRoomRecording(true);
     } catch { alert("Microphone permission denied."); }
   };
-  const stopRoomRecording = () => { if (roomMediaRecRef.current) { roomMediaRecRef.current.stop(); setRoomRecording(false); } };
+  const stopRoomRecording = () => {
+    // Real defensive fix for the "button stays red forever" symptom: previously,
+    // setRoomRecording(false) only ran INSIDE the if-check — if roomMediaRecRef.current
+    // was somehow null (a real possibility with the old race-prone touch events), the
+    // recording state would never reset, leaving the button stuck. Now always resets
+    // the visible state regardless, and separately guards the actual recorder.stop()
+    // call so it only runs if there's genuinely something to stop.
+    if (roomMediaRecRef.current && roomMediaRecRef.current.state !== "inactive") {
+      roomMediaRecRef.current.stop();
+    }
+    setRoomRecording(false);
+  };
 
   // Same real fix as Messages.jsx and Calls.jsx — releases the mic if the tab closes
   // mid-recording, before stopRoomRecording is ever called.
@@ -626,12 +645,11 @@ export default function Rooms() {
                     <button
                       className="room-send-btn"
                       style={{ background: roomRecording ? "var(--danger)" : undefined }}
-                      onMouseDown={startRoomRecording} onMouseUp={stopRoomRecording}
-                      onTouchStart={startRoomRecording} onTouchEnd={stopRoomRecording}
+                      onClick={() => { if (roomRecording) stopRoomRecording(); else startRoomRecording(); }}
                       disabled={roomSending}
-                      title="Hold to record a voice message"
+                      title={roomRecording ? "Tap to stop and send" : "Tap to record a voice message"}
                     >
-                      {roomRecording ? "⏹" : "🎙"}
+                      {roomSending ? "…" : roomRecording ? "⏹" : "🎙"}
                     </button>
                   )}
                 </>

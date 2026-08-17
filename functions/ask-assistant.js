@@ -55,7 +55,10 @@ export async function onRequest(context) {
         "Authorization": "Bearer " + GROQ_API_KEY,
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        // Real fix: llama-3.3-70b-versatile was deprecated by Groq on June 17, 2026 —
+        // confirmed via Groq's own deprecations page. openai/gpt-oss-120b is Groq's
+        // own official recommended replacement for this exact model.
+        model: "openai/gpt-oss-120b",
         messages,
         temperature: 0.6,
         max_tokens: 600,
@@ -63,7 +66,13 @@ export async function onRequest(context) {
     });
 
     if (!res.ok) {
-      return new Response(JSON.stringify({ error: "AI service returned an error (" + res.status + ")." }), { status: 502, headers });
+      // Real fix: this was discarding Groq's actual error message and just returning
+      // a generic "AI service returned an error (502)" — meaning we had zero visibility
+      // into WHY it failed (expired key, rate limit, model name changed, etc). Now
+      // reads and returns Groq's real error text so the actual cause is visible.
+      const errorBody = await res.text();
+      console.error("Groq API error:", res.status, errorBody);
+      return new Response(JSON.stringify({ error: "AI service error (" + res.status + "): " + errorBody.slice(0, 300) }), { status: 502, headers });
     }
 
     const data = await res.json();
