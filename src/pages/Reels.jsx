@@ -30,10 +30,19 @@ const CSS = `
 .rl-source-badge{position:absolute;top:16px;right:16px;background:rgba(0,0,0,.5);color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;backdrop-filter:blur(4px);}
 .rl-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;gap:12px;text-align:center;padding:30px;}
 .rl-add-btn{position:fixed;bottom:90px;right:16px;background:linear-gradient(135deg,var(--primary),#8B5CF6);color:#fff;border:none;width:50px;height:50px;border-radius:50%;font-size:22px;cursor:pointer;box-shadow:0 8px 24px rgba(59,130,246,.5);z-index:20;}
+.rl-refresh-btn{position:fixed;bottom:152px;right:16px;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);color:#fff;border:1px solid rgba(255,255,255,.2);width:50px;height:50px;border-radius:50%;font-size:19px;cursor:pointer;z-index:20;display:flex;align-items:center;justify-content:center;}
+.rl-refresh-btn.spinning{animation:rlSpin 1s linear infinite;}
+@keyframes rlSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .rl-cat-filter{position:fixed;top:64px;left:0;right:0;display:flex;gap:6px;overflow-x:auto;padding:8px 12px;z-index:15;background:linear-gradient(to bottom,rgba(0,0,0,.6),transparent);}
 .rl-cat-chip{flex-shrink:0;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:650;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);cursor:pointer;white-space:nowrap;}
 .rl-cat-chip.on{background:var(--primary);border-color:var(--primary);}
 `;
+
+// This must be set to your actual deployed Reels Worker's URL (shown after
+// `npx wrangler deploy` — looks like https://diasporalink-fetch-reels.<your-subdomain>.workers.dev).
+// Used for the manual "refresh" button below — visiting this URL directly triggers an
+// immediate real fetch with rotating queries, same as the scheduled run does.
+const REELS_WORKER_URL = import.meta.env.VITE_REELS_WORKER_URL || "";
 
 const CATEGORY_LABELS = {
   scholarships: "🎓 Scholarships", jobs: "💼 Jobs", tech: "💻 Tech", courses: "📚 Courses",
@@ -66,6 +75,20 @@ export default function Reels() {
   const isStaff = ["embassy", "admin", "president"].includes(userProfile?.role);
   const [reels, setReels] = useState([]);
   const [activeCategory, setActiveCategory] = useState("all");
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Real, working manual refresh — calls the Worker directly, which runs the same
+  // rotating-query fetch the schedule uses, but right now instead of waiting up to
+  // 3 hours. New videos land in Firestore and appear automatically via the existing
+  // onSnapshot listener below — no extra wiring needed for them to show up.
+  const refreshReels = async () => {
+    if (!REELS_WORKER_URL || refreshing) return;
+    setRefreshing(true);
+    try {
+      await fetch(REELS_WORKER_URL);
+    } catch (e) { /* the scheduled run will still happen regardless */ }
+    setTimeout(() => setRefreshing(false), 2000);
+  };
   const [showAdd, setShowAdd] = useState(false);
   const [linkInput, setLinkInput] = useState("");
   const [titleInput, setTitleInput] = useState("");
@@ -219,6 +242,9 @@ export default function Reels() {
       })}
 
       <button className="rl-add-btn" onClick={() => setShowAdd(true)} title="Share a link">➕</button>
+      {REELS_WORKER_URL && (
+        <button className={"rl-refresh-btn" + (refreshing ? " spinning" : "")} onClick={refreshReels} disabled={refreshing} title="Get new videos">🔄</button>
+      )}
 
       {showAdd && (
         <div className="modal-overlay" onClick={() => setShowAdd(false)}>

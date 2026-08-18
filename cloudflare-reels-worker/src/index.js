@@ -4,17 +4,54 @@
 // which is exactly why this converts cleanly to Workers — no nodejs_compat flag needed
 // here, unlike the Agora token function.
 
+// Real fix for "same boring videos every time": previously each category had ONE fixed
+// query string, searched identically on every single scheduled run. Combined with
+// order=viewCount, this reliably surfaced the same small set of top-ranked videos
+// again and again — not a bug, just what a static query does. Now each category has
+// several real query variations, and one is picked at random each run — genuine
+// rotation, not the same search repeated forever.
 const CATEGORIES = [
-  { key: "scholarships", query: "scholarship opportunities students 2026" },
-  { key: "jobs", query: "job opportunities graduates career advice" },
-  { key: "tech", query: "technology trends software development skills" },
-  { key: "courses", query: "free online courses certification students" },
-  { key: "news", query: "youth news trends education Africa" },
-  { key: "life", query: "student life advice relationships motivation" },
-  { key: "faith", query: "christian devotion encouragement short" },
-  { key: "trending", query: "trending viral funny shorts entertainment" },
-  { key: "jokes", query: "funny jokes comedy shorts clean humor" },
+  { key: "scholarships", queries: [
+    "scholarship opportunities students 2026", "study abroad scholarship tips",
+    "fully funded masters scholarship", "how to win a scholarship interview",
+  ]},
+  { key: "jobs", queries: [
+    "job opportunities graduates career advice", "how to get hired 2026",
+    "resume tips for graduates", "career change advice young professionals",
+  ]},
+  { key: "tech", queries: [
+    "technology trends software development skills", "new tech gadgets 2026",
+    "coding tips for beginners", "AI tools students should know",
+  ]},
+  { key: "courses", queries: [
+    "free online courses certification students", "best free coding bootcamp",
+    "learn a new skill online free", "certification worth getting 2026",
+  ]},
+  { key: "news", queries: [
+    "youth news trends education Africa", "student news update this week",
+    "global youth trends 2026", "education news Africa students",
+  ]},
+  { key: "life", queries: [
+    "student life advice relationships motivation", "study abroad life tips",
+    "how to make friends studying abroad", "motivation for students far from home",
+  ]},
+  { key: "faith", queries: [
+    "christian devotion encouragement short", "daily bible encouragement short",
+    "christian motivation students", "faith encouragement young adults",
+  ]},
+  { key: "trending", queries: [
+    "trending viral funny shorts entertainment", "viral shorts this week",
+    "trending videos worldwide", "popular shorts right now",
+  ]},
+  { key: "jokes", queries: [
+    "funny jokes comedy shorts clean humor", "clean stand up comedy shorts",
+    "funny moments compilation clean", "wholesome funny shorts",
+  ]},
 ];
+
+function pickRandomQuery(category) {
+  return category.queries[Math.floor(Math.random() * category.queries.length)];
+}
 
 async function searchYouTube(query, apiKey) {
   // relevanceLanguage=en biases results toward English-language videos — the real fix
@@ -51,7 +88,8 @@ async function runFetch(env) {
 
   for (const cat of CATEGORIES) {
     try {
-      const videos = await searchYouTube(cat.query, YOUTUBE_API_KEY);
+      const query = pickRandomQuery(cat);
+      const videos = await searchYouTube(query, YOUTUBE_API_KEY);
       for (const v of videos) {
         const docId = "yt_" + v.videoId;
         const body = {
